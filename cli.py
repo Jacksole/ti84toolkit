@@ -17,7 +17,7 @@ from rich.console import Console
 
 from core.menu import main_menu
 from core.validation import ValidationError
-from modules import electronics, logic, math_tools
+from modules import electronics, logic, math_tools, physics
 
 console = Console()
 
@@ -35,6 +35,9 @@ app.add_typer(logic_app, name="logic")
 
 math_app = typer.Typer(help="Math tools: quadratic solver, trigonometry, general equation solving.")
 app.add_typer(math_app, name="math")
+
+physics_app = typer.Typer(help="Physics: kinematics solver, energy and power calculations.")
+app.add_typer(physics_app, name="physics")
 
 
 @app.callback(invoke_without_command=True)
@@ -255,6 +258,100 @@ def solve_cmd(
         raise typer.Exit(code=1)
 
     console.print(f"[green]{result.variable} = {', '.join(result.solutions)}[/green]")
+
+
+# ---------------------------------------------------------------------------
+# physics kinematics
+# ---------------------------------------------------------------------------
+
+
+@physics_app.command("kinematics")
+def kinematics_cmd(
+    v0: Optional[float] = typer.Option(None, "--v0", help="Initial velocity (m/s)"),
+    v: Optional[float] = typer.Option(None, "--v", help="Final velocity (m/s)"),
+    a: Optional[float] = typer.Option(None, "--a", help="Acceleration (m/s^2)"),
+    t: Optional[float] = typer.Option(None, "--t", help="Time (s)"),
+    d: Optional[float] = typer.Option(None, "--d", help="Displacement (m)"),
+) -> None:
+    """Solve constant-acceleration kinematics given exactly 3 of v0, v, a, t, d."""
+    try:
+        result = physics.kinematics_solve(v0, v, a, t, d)
+    except ValidationError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]Solved for {' and '.join(result.solved_for)}:[/green]")
+    console.print(f"  v0 = {result.values['v0']:g} m/s")
+    console.print(f"  v  = {result.values['v']:g} m/s")
+    console.print(f"  a  = {result.values['a']:g} m/s²")
+    console.print(f"  t  = {result.values['t']:g} s")
+    console.print(f"  d  = {result.values['d']:g} m")
+
+
+# ---------------------------------------------------------------------------
+# physics energy
+# ---------------------------------------------------------------------------
+
+
+@physics_app.command("energy")
+def energy_cmd(
+    kind: str = typer.Argument(..., help="kinetic, potential, or work"),
+    mass: Optional[float] = typer.Option(None, "--mass", help="Mass in kg (kinetic/potential)"),
+    velocity: Optional[float] = typer.Option(None, "--velocity", help="Velocity in m/s (kinetic)"),
+    height: Optional[float] = typer.Option(None, "--height", help="Height in m (potential)"),
+    gravity: float = typer.Option(9.81, "--gravity", help="Gravity in m/s^2 (potential, default Earth)"),
+    force: Optional[float] = typer.Option(None, "--force", help="Force in N (work)"),
+    distance: Optional[float] = typer.Option(None, "--distance", help="Distance in m (work)"),
+) -> None:
+    """Compute kinetic energy, gravitational potential energy, or work done."""
+    kind = kind.strip().lower()
+    try:
+        if kind == "kinetic":
+            if mass is None or velocity is None:
+                raise ValidationError("kinetic energy requires --mass and --velocity.")
+            result = physics.kinetic_energy(mass, velocity)
+        elif kind == "potential":
+            if mass is None or height is None:
+                raise ValidationError("potential energy requires --mass and --height.")
+            result = physics.potential_energy(mass, height, gravity)
+        elif kind == "work":
+            if force is None or distance is None:
+                raise ValidationError("work requires --force and --distance.")
+            result = physics.work_done(force, distance)
+        else:
+            raise ValidationError("kind must be one of: kinetic, potential, work.")
+    except ValidationError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]{result.label}:[/green] {result.joules:g} J")
+
+
+# ---------------------------------------------------------------------------
+# physics power
+# ---------------------------------------------------------------------------
+
+
+@physics_app.command("power")
+def power_cmd(
+    work: Optional[float] = typer.Option(None, "--work", help="Work in J (used with --time)"),
+    time: Optional[float] = typer.Option(None, "--time", help="Time in s (used with --work)"),
+    force: Optional[float] = typer.Option(None, "--force", help="Force in N (used with --velocity)"),
+    velocity: Optional[float] = typer.Option(None, "--velocity", help="Velocity in m/s (used with --force)"),
+) -> None:
+    """Compute power from either (work, time) or (force, velocity)."""
+    try:
+        if work is not None and time is not None:
+            result = physics.power_from_work(work, time)
+        elif force is not None and velocity is not None:
+            result = physics.power_from_force_velocity(force, velocity)
+        else:
+            raise ValidationError("Provide either (--work and --time) or (--force and --velocity).")
+    except ValidationError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]Power:[/green] {result.watts:g} W")
 
 
 if __name__ == "__main__":

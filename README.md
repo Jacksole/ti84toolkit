@@ -7,8 +7,8 @@ loss on reset.
 
 ## Status
 
-**Electronics, Logic, and Math modules: complete.** Physics is stubbed in the
-menu and ready to be built out next (see Roadmap below).
+**All four V1 modules complete: Electronics, Logic, Math, and Physics.**
+See Roadmap below for what's next.
 
 ## Install
 
@@ -64,10 +64,22 @@ toolkit math trig sin 90
 # Math -- general equation solving (linear, quadratic, and beyond)
 toolkit math solve "2*x + 3 = 7"
 toolkit math solve "x**2 - 4 = 0"
+
+# Physics -- kinematics (exactly 3 of v0, v, a, t, d)
+toolkit physics kinematics --v0 0 --a 2 --t 5
+
+# Physics -- energy (kinetic, potential, or work)
+toolkit physics energy kinetic --mass 2 --velocity 3
+toolkit physics energy potential --mass 1 --height 10
+toolkit physics energy work --force 10 --distance 5
+
+# Physics -- power (from work+time OR force+velocity)
+toolkit physics power --work 100 --time 4
+toolkit physics power --force 10 --velocity 5
 ```
 
-Run `toolkit electronics --help`, `toolkit logic --help`, or `toolkit math --help`
-to see all options for any command.
+Run `toolkit electronics --help`, `toolkit logic --help`, `toolkit math --help`,
+or `toolkit physics --help` to see all options for any command.
 
 ## Project Structure
 
@@ -80,11 +92,13 @@ ti84toolkit/
 ├── modules/
 │   ├── electronics.py       # Ohm's Law, resistor color code, 555 timer
 │   ├── logic.py              # Gate evaluation, truth tables, boolean expression parsing
-│   └── math_tools.py         # Quadratic solver, trigonometry, sympy-backed equation solving
+│   ├── math_tools.py         # Quadratic solver, trigonometry, sympy-backed equation solving
+│   └── physics.py            # Kinematics solver (sympy-backed), energy, power
 ├── tests/
 │   ├── test_electronics.py
 │   ├── test_logic.py
-│   └── test_math_tools.py    # 60 tests total (pytest)
+│   ├── test_math_tools.py
+│   └── test_physics.py       # 74 tests total (pytest)
 ├── requirements.txt
 └── setup.py
 ```
@@ -98,19 +112,23 @@ python -m pytest tests/ -v
 
 ## Roadmap (V2)
 
-Carried over from the original handoff doc, now unconstrained by calculator
-memory limits:
+All four V1 modules (Electronics, Logic, Math, Physics) are complete. What's
+left from the original handoff doc's V2 wishlist, now unconstrained by
+calculator memory limits:
 
-- **Physics module** — kinematics, energy/power calculations
 - **Statistics module** — deferred in V1, now feasible
 - **History/persistence** — optional SQLite-backed calculation log (impossible
   on the original hardware due to RAM reset; trivial here)
 - **Theming** — `rich` theme support as a nod to the original "theme/visual
   modes" plan
+- **Gamification** — badge system / easter eggs, per the original doc's V2 plan
 
 Already brought forward from the original V2 roadmap: the truth table
 generator and boolean expression evaluator (originally deferred as "advanced
-logic tools") are implemented in the Logic module above.
+logic tools") are implemented in the Logic module. The kinematics solver also
+goes beyond the original scope by solving all 10 possible combinations of
+3-known-of-5 variables generally via sympy, rather than a lookup table of the
+classic SUVAT equations.
 
 ## Design Notes
 

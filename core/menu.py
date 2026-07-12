@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from core.validation import ValidationError, prompt_float
-from modules import electronics, logic, math_tools
+from modules import electronics, logic, math_tools, physics
 
 console = Console()
 
@@ -269,6 +269,102 @@ def _math_menu() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Physics submenu
+# ---------------------------------------------------------------------------
+
+
+def _menu_kinematics() -> None:
+    _header("Kinematics Solver")
+    console.print("Enter exactly THREE of the five values below. Leave the other two blank.\n")
+
+    v0 = prompt_float("Initial velocity v0 (m/s)", allow_blank=True)
+    v = prompt_float("Final velocity v (m/s)", allow_blank=True)
+    a = prompt_float("Acceleration a (m/s²)", allow_blank=True)
+    t = prompt_float("Time t (s)", allow_blank=True)
+    d = prompt_float("Displacement d (m)", allow_blank=True)
+
+    try:
+        result = physics.kinematics_solve(v0, v, a, t, d)
+        console.print(f"\n[green]Solved for {' and '.join(result.solved_for)}:[/green]")
+        console.print(f"  v0 = {result.values['v0']:g} m/s")
+        console.print(f"  v  = {result.values['v']:g} m/s")
+        console.print(f"  a  = {result.values['a']:g} m/s²")
+        console.print(f"  t  = {result.values['t']:g} s")
+        console.print(f"  d  = {result.values['d']:g} m")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _menu_energy() -> None:
+    _header("Energy Calculator")
+    console.print("1. Kinetic Energy\n2. Gravitational Potential Energy\n3. Work Done\n")
+
+    choice = Prompt.ask("Select", choices=["1", "2", "3"], show_choices=False)
+
+    try:
+        if choice == "1":
+            mass = prompt_float("Mass (kg)")
+            velocity = prompt_float("Velocity (m/s)")
+            result = physics.kinetic_energy(mass, velocity)
+        elif choice == "2":
+            mass = prompt_float("Mass (kg)")
+            height = prompt_float("Height (m)")
+            g = prompt_float("Gravity (m/s², blank for Earth 9.81)", allow_blank=True)
+            result = physics.potential_energy(mass, height, g if g is not None else 9.81)
+        else:
+            force = prompt_float("Force (N)")
+            distance = prompt_float("Distance (m)")
+            result = physics.work_done(force, distance)
+
+        console.print(f"\n[green]{result.label}:[/green] {result.joules:g} J")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _menu_power() -> None:
+    _header("Power Calculator")
+    console.print("1. From Work + Time\n2. From Force + Velocity\n")
+
+    choice = Prompt.ask("Select", choices=["1", "2"], show_choices=False)
+
+    try:
+        if choice == "1":
+            work = prompt_float("Work (J)")
+            time = prompt_float("Time (s)")
+            result = physics.power_from_work(work, time)
+        else:
+            force = prompt_float("Force (N)")
+            velocity = prompt_float("Velocity (m/s)")
+            result = physics.power_from_force_velocity(force, velocity)
+
+        console.print(f"\n[green]Power:[/green] {result.watts:g} W")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _physics_menu() -> None:
+    while True:
+        _header("Physics")
+        console.print("1. Kinematics Solver")
+        console.print("2. Energy Calculator")
+        console.print("3. Power Calculator")
+        console.print("0. Back\n")
+
+        choice = Prompt.ask("Select", choices=["0", "1", "2", "3"], show_choices=False)
+        if choice == "0":
+            return
+        elif choice == "1":
+            _menu_kinematics()
+        elif choice == "2":
+            _menu_energy()
+        elif choice == "3":
+            _menu_power()
+
+
+# ---------------------------------------------------------------------------
 # Main menu
 # ---------------------------------------------------------------------------
 
@@ -277,9 +373,9 @@ def main_menu() -> None:
     while True:
         _header("TI-84 Embedded Systems Toolkit")
         console.print("1. Electronics")
-        console.print("2. Math  [dim](coming soon)[/dim]")
-        console.print("3. Physics  [dim](coming soon)[/dim]")
-        console.print("4. Logic  [dim](coming soon)[/dim]")
+        console.print("2. Math")
+        console.print("3. Physics")
+        console.print("4. Logic")
         console.print("0. Exit\n")
 
         choice = Prompt.ask("Select", choices=["0", "1", "2", "3", "4"], show_choices=False)
@@ -290,8 +386,7 @@ def main_menu() -> None:
             _electronics_menu()
         elif choice == "2":
             _math_menu()
+        elif choice == "3":
+            _physics_menu()
         elif choice == "4":
             _logic_menu()
-        else:
-            console.print("\n[yellow]This module isn't built yet.[/yellow]")
-            _pause()
