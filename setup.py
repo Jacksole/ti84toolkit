@@ -9,6 +9,7 @@ setup(
     install_requires=[
         "typer>=0.12.0",
         "rich>=13.7.0",
+        "sympy>=1.13.0",
     ],
     entry_points={
         "console_scripts": [

@@ -7,7 +7,7 @@ loss on reset.
 
 ## Status
 
-**Electronics module: complete.** Math, Physics, and Logic are stubbed in the
+**Electronics, Logic, and Math modules: complete.** Physics is stubbed in the
 menu and ready to be built out next (see Roadmap below).
 
 ## Install
@@ -45,9 +45,29 @@ toolkit electronics resistor orange orange red gold
 
 # 555 timer astable mode
 toolkit electronics timer555 --r1 1000 --r2 1000 --c 0.000001
+
+# Logic -- evaluate a single gate
+toolkit logic gate NAND true true
+
+# Logic -- truth table by gate name
+toolkit logic truth-table XOR --inputs 2
+
+# Logic -- truth table by boolean expression
+toolkit logic truth-table "A AND (B OR NOT C)"
+
+# Math -- quadratic solver (use --flag=-value for negative coefficients)
+toolkit math quadratic --a 1 --b=-5 --c 6
+
+# Math -- trigonometry
+toolkit math trig sin 90
+
+# Math -- general equation solving (linear, quadratic, and beyond)
+toolkit math solve "2*x + 3 = 7"
+toolkit math solve "x**2 - 4 = 0"
 ```
 
-Run `toolkit electronics --help` to see all options for any command.
+Run `toolkit electronics --help`, `toolkit logic --help`, or `toolkit math --help`
+to see all options for any command.
 
 ## Project Structure
 
@@ -58,9 +78,13 @@ ti84toolkit/
 │   ├── menu.py              # Interactive menu system (rich-based)
 │   └── validation.py        # Shared input validation
 ├── modules/
-│   └── electronics.py       # Ohm's Law, resistor color code, 555 timer
+│   ├── electronics.py       # Ohm's Law, resistor color code, 555 timer
+│   ├── logic.py              # Gate evaluation, truth tables, boolean expression parsing
+│   └── math_tools.py         # Quadratic solver, trigonometry, sympy-backed equation solving
 ├── tests/
-│   └── test_electronics.py  # Unit tests (pytest)
+│   ├── test_electronics.py
+│   ├── test_logic.py
+│   └── test_math_tools.py    # 60 tests total (pytest)
 ├── requirements.txt
 └── setup.py
 ```
@@ -77,14 +101,16 @@ python -m pytest tests/ -v
 Carried over from the original handoff doc, now unconstrained by calculator
 memory limits:
 
-- **Math module** — algebra, trig, equation solving (likely backed by `sympy`)
 - **Physics module** — kinematics, energy/power calculations
-- **Logic module** — gate simulation + rendered truth tables
 - **Statistics module** — deferred in V1, now feasible
 - **History/persistence** — optional SQLite-backed calculation log (impossible
   on the original hardware due to RAM reset; trivial here)
 - **Theming** — `rich` theme support as a nod to the original "theme/visual
   modes" plan
+
+Already brought forward from the original V2 roadmap: the truth table
+generator and boolean expression evaluator (originally deferred as "advanced
+logic tools") are implemented in the Logic module above.
 
 ## Design Notes
 

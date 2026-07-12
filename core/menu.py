@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from core.validation import ValidationError, prompt_float
-from modules import electronics, logic
+from modules import electronics, logic, math_tools
 
 console = Console()
 
@@ -189,6 +189,86 @@ def _logic_menu() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Math submenu
+# ---------------------------------------------------------------------------
+
+
+def _menu_quadratic() -> None:
+    _header("Quadratic Solver")
+    console.print("Solve ax² + bx + c = 0\n")
+
+    a = prompt_float("a")
+    b = prompt_float("b")
+    c = prompt_float("c")
+
+    try:
+        result = math_tools.quadratic_solve(a, b, c)
+        console.print(f"\n[green]Discriminant:[/green] {result.discriminant:g} ({result.nature})")
+        for i, root in enumerate(result.roots, 1):
+            real = root.real + 0.0
+            if root.imag == 0:
+                console.print(f"  x{i} = {real:g}")
+            else:
+                sign = "+" if root.imag >= 0 else "-"
+                console.print(f"  x{i} = {real:g} {sign} {abs(root.imag):g}i")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _menu_trig() -> None:
+    _header("Trigonometry")
+    console.print("Functions: sin, cos, tan, asin, acos, atan\n")
+
+    function = Prompt.ask("Function").strip().lower()
+    value = prompt_float("Value")
+    unit = Prompt.ask("Unit", choices=["deg", "rad"], default="deg")
+
+    try:
+        result = math_tools.trig_evaluate(function, value, unit)
+        is_inverse = function.startswith("a")
+        suffix = f" {unit}" if is_inverse else ""
+        console.print(f"\n[green]{function}({value}) = {result:g}{suffix}[/green]")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _menu_solve_equation() -> None:
+    _header("Equation Solver")
+    console.print('Enter an equation, e.g. "2*x + 3 = 7" or "x**2 - 4 = 0"\n')
+
+    equation = Prompt.ask("Equation")
+    variable = Prompt.ask("Variable", default="x")
+
+    try:
+        result = math_tools.solve_equation(equation, variable)
+        console.print(f"\n[green]{result.variable} = {', '.join(result.solutions)}[/green]")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _math_menu() -> None:
+    while True:
+        _header("Math")
+        console.print("1. Quadratic Solver")
+        console.print("2. Trigonometry")
+        console.print("3. Equation Solver")
+        console.print("0. Back\n")
+
+        choice = Prompt.ask("Select", choices=["0", "1", "2", "3"], show_choices=False)
+        if choice == "0":
+            return
+        elif choice == "1":
+            _menu_quadratic()
+        elif choice == "2":
+            _menu_trig()
+        elif choice == "3":
+            _menu_solve_equation()
+
+
+# ---------------------------------------------------------------------------
 # Main menu
 # ---------------------------------------------------------------------------
 
@@ -208,6 +288,8 @@ def main_menu() -> None:
             return
         elif choice == "1":
             _electronics_menu()
+        elif choice == "2":
+            _math_menu()
         elif choice == "4":
             _logic_menu()
         else:
