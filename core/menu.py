@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from core.validation import ValidationError, prompt_float
-from modules import electronics
+from modules import electronics, logic
 
 console = Console()
 
@@ -109,6 +109,86 @@ def _electronics_menu() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Logic submenu
+# ---------------------------------------------------------------------------
+
+
+def _render_truth_table(result, title: str) -> None:
+    from rich.table import Table
+
+    table = Table(title=title)
+    for var in result.variables:
+        table.add_column(var, justify="center")
+    table.add_column("Output", justify="center", style="bold")
+
+    for combo, output in result.rows:
+        row = ["T" if v else "F" for v in combo]
+        row.append("[green]T[/green]" if output else "[red]F[/red]")
+        table.add_row(*row)
+
+    console.print(table)
+
+
+def _menu_gate_eval() -> None:
+    _header("Gate Evaluator")
+    console.print(f"Available gates: {', '.join(logic.GATE_NAMES)}\n")
+
+    gate = Prompt.ask("Gate").strip().upper()
+    raw_inputs = Prompt.ask("Inputs (space-separated, e.g. true false)")
+
+    try:
+        bool_inputs = []
+        for tok in raw_inputs.split():
+            v = tok.strip().lower()
+            if v in ("true", "t", "1"):
+                bool_inputs.append(True)
+            elif v in ("false", "f", "0"):
+                bool_inputs.append(False)
+            else:
+                raise ValidationError(f"'{tok}' is not a valid boolean.")
+        result = logic.evaluate_gate(gate, bool_inputs)
+        console.print(f"\n[green]{gate}({raw_inputs}) = {result}[/green]")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _menu_truth_table() -> None:
+    _header("Truth Table Generator")
+    console.print("Enter a gate name (e.g. AND) or a boolean expression (e.g. A AND (B OR NOT C))\n")
+
+    expr = Prompt.ask("Gate or expression")
+
+    try:
+        if expr.strip().upper() in logic.GATE_NAMES:
+            n = prompt_float("Number of inputs")
+            result = logic.gate_truth_table(expr, int(n))
+        else:
+            result = logic.expression_truth_table(expr)
+        console.print()
+        _render_truth_table(result, expr.upper())
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _logic_menu() -> None:
+    while True:
+        _header("Logic")
+        console.print("1. Evaluate a Gate")
+        console.print("2. Generate Truth Table")
+        console.print("0. Back\n")
+
+        choice = Prompt.ask("Select", choices=["0", "1", "2"], show_choices=False)
+        if choice == "0":
+            return
+        elif choice == "1":
+            _menu_gate_eval()
+        elif choice == "2":
+            _menu_truth_table()
+
+
+# ---------------------------------------------------------------------------
 # Main menu
 # ---------------------------------------------------------------------------
 
@@ -128,6 +208,8 @@ def main_menu() -> None:
             return
         elif choice == "1":
             _electronics_menu()
+        elif choice == "4":
+            _logic_menu()
         else:
             console.print("\n[yellow]This module isn't built yet.[/yellow]")
             _pause()

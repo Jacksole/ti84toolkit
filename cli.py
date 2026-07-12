@@ -17,7 +17,7 @@ from rich.console import Console
 
 from core.menu import main_menu
 from core.validation import ValidationError
-from modules import electronics
+from modules import electronics, logic
 
 console = Console()
 
@@ -29,6 +29,9 @@ app = typer.Typer(
 
 electronics_app = typer.Typer(help="Electronics utilities: Ohm's Law, resistor codes, 555 timer.")
 app.add_typer(electronics_app, name="electronics")
+
+logic_app = typer.Typer(help="Digital logic: gate evaluation and truth table generation.")
+app.add_typer(logic_app, name="logic")
 
 
 @app.callback(invoke_without_command=True)
@@ -106,6 +109,79 @@ def timer555_cmd(
     console.print(f"[green]Duty Cycle:[/green] {result.duty_cycle_pct:.2f}%")
     console.print(f"[green]Time High:[/green] {result.time_high_s * 1000:.4f} ms")
     console.print(f"[green]Time Low:[/green] {result.time_low_s * 1000:.4f} ms")
+
+
+def _render_truth_table(result, title: str) -> None:
+    from rich.table import Table
+
+    table = Table(title=title)
+    for var in result.variables:
+        table.add_column(var, justify="center")
+    table.add_column("Output", justify="center", style="bold")
+
+    for combo, output in result.rows:
+        row = ["T" if v else "F" for v in combo]
+        row.append("[green]T[/green]" if output else "[red]F[/red]")
+        table.add_row(*row)
+
+    console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# logic gate
+# ---------------------------------------------------------------------------
+
+
+@logic_app.command("gate")
+def gate_cmd(
+    gate: str = typer.Argument(..., help=f"Gate name: {', '.join(logic.GATE_NAMES)}"),
+    inputs: list[str] = typer.Argument(..., help="Boolean inputs, e.g. true false 1 0"),
+) -> None:
+    """Evaluate a single gate against given boolean inputs."""
+    try:
+        bool_inputs = [_parse_bool(i) for i in inputs]
+        result = logic.evaluate_gate(gate, bool_inputs)
+    except ValidationError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]{gate.upper()}({', '.join(inputs)}) = {result}[/green]")
+
+
+def _parse_bool(value: str) -> bool:
+    v = value.strip().lower()
+    if v in ("true", "t", "1"):
+        return True
+    if v in ("false", "f", "0"):
+        return False
+    raise ValidationError(f"'{value}' is not a valid boolean (use true/false, 1/0, t/f).")
+
+
+# ---------------------------------------------------------------------------
+# logic truth-table
+# ---------------------------------------------------------------------------
+
+
+@logic_app.command("truth-table")
+def truth_table_cmd(
+    expression: str = typer.Argument(
+        ..., help='Gate name (e.g. "AND") or boolean expression (e.g. "A AND (B OR NOT C)")'
+    ),
+    inputs: int = typer.Option(
+        2, "--inputs", "-n", help="Number of inputs (only used when EXPRESSION is a plain gate name)"
+    ),
+) -> None:
+    """Generate a truth table for a gate name or a boolean expression."""
+    try:
+        if expression.strip().upper() in logic.GATE_NAMES:
+            result = logic.gate_truth_table(expression, inputs)
+        else:
+            result = logic.expression_truth_table(expression)
+    except ValidationError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    _render_truth_table(result, expression.upper())
 
 
 if __name__ == "__main__":
