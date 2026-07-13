@@ -7,9 +7,9 @@ loss on reset.
 
 ## Status
 
-**All four V1 modules complete (Electronics, Logic, Math, Physics), plus
-Statistics** — originally deferred in the V1 handoff doc's Known Limitations
-("No statistics module (deferred)"), now built out as a V2 addition.
+**V1 complete** (Electronics, Logic, Math, Physics) **+ V2 complete**
+(Statistics, Unit Conversion, History/Persistence, JSON output, Batch mode,
+Config file, Gamification, Shell completion).
 
 ## Install
 
@@ -88,31 +88,96 @@ toolkit stats quartiles 1 2 3 4 5 6 7
 toolkit stats factorial 5
 toolkit stats npr 5 2
 toolkit stats ncr 5 2
+
+# Units -- convert between units in a category
+toolkit units convert length 1 km m
+toolkit units convert temperature 100 c f
+toolkit units convert resistance 2.2 kohm ohm
+toolkit units list-units length
+
+# History -- view or clear your local calculation log
+toolkit history show
+toolkit history show --limit 5 --module electronics
+toolkit history clear --yes
+
+# JSON output -- add --json before the subcommand, for any command
+toolkit --json math solve "2*x + 3 = 7"
+toolkit --json units convert length 1 mi km
+
+# Batch mode -- run a sequence of commands from a file
+toolkit batch my_commands.txt
 ```
 
 Run `toolkit electronics --help`, `toolkit logic --help`, `toolkit math --help`,
-`toolkit physics --help`, or `toolkit stats --help` to see all options for any command.
+`toolkit physics --help`, `toolkit stats --help`, `toolkit units --help`, or
+`toolkit history --help` to see all options for any command.
+
+### Shell completion
+
+Built into `typer` at no extra cost:
+
+```bash
+toolkit --install-completion
+```
+
+### Config file
+
+Optional, at `~/.config/ti84toolkit/config.toml`:
+
+```ini
+[physics]
+gravity = 9.81
+
+[display]
+precision = 6
+```
+
+Currently `physics.gravity` sets the default for `toolkit physics energy potential`
+(override per-call with `--gravity`). `display.precision` is reserved for a
+future formatting pass.
+
+### Calculation history
+
+Every successful calculation is logged locally to `~/.ti84toolkit/history.db`
+(SQLite). Nothing leaves your machine. View it anytime with `toolkit history show`,
+or wipe it with `toolkit history clear`.
+
+### Batch file format
+
+One command's arguments per line (omit the leading `toolkit`), `#` for comments:
+
+```
+# my_commands.txt
+electronics ohms-law --current 2 --resistance 100
+math quadratic --a 1 --b -5 --c 6
+stats factorial 5
+```
+
+### Gamification
+
+Milestone badges (1 / 10 / 50 / 100 / 500 logged calculations) print
+automatically the moment you cross a threshold — a small callback to the
+original doc's V2 "badge system" idea.
 
 ## Project Structure
 
 ```
 ti84toolkit/
-├── cli.py                  # Entrypoint: typer app, routes to menu or subcommands
+├── cli.py                  # Entrypoint: typer app, menu/subcommands/JSON/history/batch
 ├── core/
 │   ├── menu.py              # Interactive menu system (rich-based)
-│   └── validation.py        # Shared input validation
+│   ├── validation.py        # Shared input validation
+│   ├── history.py           # SQLite-backed calculation history
+│   ├── config.py            # ~/.config/ti84toolkit/config.toml parser
+│   └── badges.py            # Milestone-based gamification
 ├── modules/
 │   ├── electronics.py       # Ohm's Law, resistor color code, 555 timer
 │   ├── logic.py              # Gate evaluation, truth tables, boolean expression parsing
 │   ├── math_tools.py         # Quadratic solver, trigonometry, sympy-backed equation solving
 │   ├── physics.py            # Kinematics solver (sympy-backed), energy, power
-│   └── statistics_tools.py   # Descriptive stats, quartiles, combinatorics (nPr/nCr)
-├── tests/
-│   ├── test_electronics.py
-│   ├── test_logic.py
-│   ├── test_math_tools.py
-│   ├── test_physics.py
-│   └── test_statistics_tools.py  # 92 tests total (pytest)
+│   ├── statistics_tools.py   # Descriptive stats, quartiles, combinatorics (nPr/nCr)
+│   └── units.py              # Length, mass, time, temperature, electrical unit conversion
+├── tests/                    # 131 tests total (pytest), one file per module
 ├── requirements.txt
 └── setup.py
 ```
@@ -126,26 +191,22 @@ python -m pytest tests/ -v
 
 ## Roadmap
 
-All V1 modules (Electronics, Logic, Math, Physics) plus the V2 Statistics
-addition are complete. Remaining ideas, in rough priority order:
+All V1 modules and all planned V2 additions are complete. Remaining ideas,
+if this keeps growing:
 
-- **Unit conversion module** — metric/imperial, engineering units (resistance,
-  voltage, force) — pairs naturally with the electronics module
-- **History/persistence** — SQLite-backed calculation log, viewable via
-  `toolkit history`; impossible on the original hardware due to RAM reset,
-  trivial here
-- **JSON output flag** (`--json`) across all commands, for scripting/piping
-- **Shell completion** — `typer` supports this out of the box
-- **Batch/scripting mode** — run a sequence of commands from a `.txt` file,
-  output a report
-- **Config file** — `~/.config/ti84toolkit/config.toml` for default gravity
-  constant, decimal precision, color theme
-- **Gamification** — badge system / easter eggs, per the original doc's V2 plan
+- **Broader config coverage** — `display.precision` is parsed but not yet
+  applied to output formatting
+- **Export** — `toolkit history show --format csv` for pulling a session's
+  work into a worksheet or report
+- **More unit categories** — area, volume, energy, pressure
+- **Richer batch mode** — variables/templating across lines, not just a
+  literal command list
 
-Already brought forward from the original V2 wishlist: the truth table
-generator and boolean expression evaluator (Logic module), and a fully
-general sympy-backed kinematics solver (Physics module) rather than a lookup
-table of the classic SUVAT equations.
+Already brought forward from the original V2 wishlist: truth table generator
+and boolean expression evaluator (Logic), a fully general sympy-backed
+kinematics solver (Physics) rather than a SUVAT lookup table, and the
+persistent calculation history that was explicitly impossible on the
+original TI-84 hardware.
 
 ## Design Notes
 
