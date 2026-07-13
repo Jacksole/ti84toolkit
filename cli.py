@@ -17,13 +17,13 @@ from rich.console import Console
 
 from core.menu import main_menu
 from core.validation import ValidationError
-from modules import electronics, logic, math_tools, physics
+from modules import electronics, logic, math_tools, physics, statistics_tools
 
 console = Console()
 
 app = typer.Typer(
     name="toolkit",
-    help="TI-84 Embedded Systems Toolkit -- electronics, math, physics, and logic utilities.",
+    help="TI-84 Embedded Systems Toolkit -- electronics, math, physics, logic, and statistics utilities.",
     no_args_is_help=False,
 )
 
@@ -38,6 +38,9 @@ app.add_typer(math_app, name="math")
 
 physics_app = typer.Typer(help="Physics: kinematics solver, energy and power calculations.")
 app.add_typer(physics_app, name="physics")
+
+stats_app = typer.Typer(help="Statistics: descriptive stats, quartiles, combinatorics (nPr/nCr).")
+app.add_typer(stats_app, name="stats")
 
 
 @app.callback(invoke_without_command=True)
@@ -352,6 +355,97 @@ def power_cmd(
         raise typer.Exit(code=1)
 
     console.print(f"[green]Power:[/green] {result.watts:g} W")
+
+
+# ---------------------------------------------------------------------------
+# stats describe
+# ---------------------------------------------------------------------------
+
+
+@stats_app.command("describe")
+def describe_cmd(
+    data: list[float] = typer.Argument(..., help="Data points, e.g. 2 4 4 5 7 9 (use -- before negative values)"),
+) -> None:
+    """Compute descriptive statistics (mean, median, mode, variance, std dev, range)."""
+    try:
+        result = statistics_tools.describe(data)
+    except ValidationError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]n:[/green] {result.count}    [green]Sum:[/green] {result.sum:g}")
+    console.print(f"[green]Mean:[/green] {result.mean:g}    [green]Median:[/green] {result.median:g}")
+    mode_str = ", ".join(f"{m:g}" for m in result.mode) if result.mode else "none"
+    console.print(f"[green]Mode:[/green] {mode_str}")
+    console.print(f"[green]Range:[/green] {result.data_range:g}  (min {result.minimum:g}, max {result.maximum:g})")
+    console.print(f"[green]Population variance / stdev:[/green] {result.variance_population:g} / {result.stdev_population:g}")
+    if result.variance_sample is not None:
+        console.print(f"[green]Sample variance / stdev:[/green] {result.variance_sample:g} / {result.stdev_sample:g}")
+
+
+# ---------------------------------------------------------------------------
+# stats quartiles
+# ---------------------------------------------------------------------------
+
+
+@stats_app.command("quartiles")
+def quartiles_cmd(
+    data: list[float] = typer.Argument(..., help="Data points (use -- before negative values)"),
+) -> None:
+    """Compute the five-number summary (min, Q1, median, Q3, max) and IQR."""
+    try:
+        result = statistics_tools.five_number_summary(data)
+    except ValidationError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]Min:[/green] {result.minimum:g}   [green]Q1:[/green] {result.q1:g}")
+    console.print(f"[green]Median:[/green] {result.median:g}   [green]Q3:[/green] {result.q3:g}")
+    console.print(f"[green]Max:[/green] {result.maximum:g}   [green]IQR:[/green] {result.iqr:g}")
+
+
+# ---------------------------------------------------------------------------
+# stats combinatorics
+# ---------------------------------------------------------------------------
+
+
+@stats_app.command("factorial")
+def factorial_cmd(n: int = typer.Argument(..., help="n! ")) -> None:
+    """Compute n factorial."""
+    try:
+        result = statistics_tools.factorial(n)
+    except ValidationError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+    console.print(f"[green]{n}! = {result}[/green]")
+
+
+@stats_app.command("npr")
+def npr_cmd(
+    n: int = typer.Argument(..., help="Total items"),
+    r: int = typer.Argument(..., help="Items chosen (order matters)"),
+) -> None:
+    """Compute nPr (permutations)."""
+    try:
+        result = statistics_tools.permutations(n, r)
+    except ValidationError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+    console.print(f"[green]{n}P{r} = {result}[/green]")
+
+
+@stats_app.command("ncr")
+def ncr_cmd(
+    n: int = typer.Argument(..., help="Total items"),
+    r: int = typer.Argument(..., help="Items chosen (order doesn't matter)"),
+) -> None:
+    """Compute nCr (combinations)."""
+    try:
+        result = statistics_tools.combinations(n, r)
+    except ValidationError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+    console.print(f"[green]{n}C{r} = {result}[/green]")
 
 
 if __name__ == "__main__":

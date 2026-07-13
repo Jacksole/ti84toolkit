@@ -7,8 +7,9 @@ loss on reset.
 
 ## Status
 
-**All four V1 modules complete: Electronics, Logic, Math, and Physics.**
-See Roadmap below for what's next.
+**All four V1 modules complete (Electronics, Logic, Math, Physics), plus
+Statistics** — originally deferred in the V1 handoff doc's Known Limitations
+("No statistics module (deferred)"), now built out as a V2 addition.
 
 ## Install
 
@@ -76,10 +77,21 @@ toolkit physics energy work --force 10 --distance 5
 # Physics -- power (from work+time OR force+velocity)
 toolkit physics power --work 100 --time 4
 toolkit physics power --force 10 --velocity 5
+
+# Statistics -- descriptive stats (use -- before negative values)
+toolkit stats describe 2 4 4 5 7 9
+
+# Statistics -- five-number summary / quartiles
+toolkit stats quartiles 1 2 3 4 5 6 7
+
+# Statistics -- combinatorics
+toolkit stats factorial 5
+toolkit stats npr 5 2
+toolkit stats ncr 5 2
 ```
 
 Run `toolkit electronics --help`, `toolkit logic --help`, `toolkit math --help`,
-or `toolkit physics --help` to see all options for any command.
+`toolkit physics --help`, or `toolkit stats --help` to see all options for any command.
 
 ## Project Structure
 
@@ -93,12 +105,14 @@ ti84toolkit/
 │   ├── electronics.py       # Ohm's Law, resistor color code, 555 timer
 │   ├── logic.py              # Gate evaluation, truth tables, boolean expression parsing
 │   ├── math_tools.py         # Quadratic solver, trigonometry, sympy-backed equation solving
-│   └── physics.py            # Kinematics solver (sympy-backed), energy, power
+│   ├── physics.py            # Kinematics solver (sympy-backed), energy, power
+│   └── statistics_tools.py   # Descriptive stats, quartiles, combinatorics (nPr/nCr)
 ├── tests/
 │   ├── test_electronics.py
 │   ├── test_logic.py
 │   ├── test_math_tools.py
-│   └── test_physics.py       # 74 tests total (pytest)
+│   ├── test_physics.py
+│   └── test_statistics_tools.py  # 92 tests total (pytest)
 ├── requirements.txt
 └── setup.py
 ```
@@ -110,25 +124,28 @@ pip install -r requirements.txt
 python -m pytest tests/ -v
 ```
 
-## Roadmap (V2)
+## Roadmap
 
-All four V1 modules (Electronics, Logic, Math, Physics) are complete. What's
-left from the original handoff doc's V2 wishlist, now unconstrained by
-calculator memory limits:
+All V1 modules (Electronics, Logic, Math, Physics) plus the V2 Statistics
+addition are complete. Remaining ideas, in rough priority order:
 
-- **Statistics module** — deferred in V1, now feasible
-- **History/persistence** — optional SQLite-backed calculation log (impossible
-  on the original hardware due to RAM reset; trivial here)
-- **Theming** — `rich` theme support as a nod to the original "theme/visual
-  modes" plan
+- **Unit conversion module** — metric/imperial, engineering units (resistance,
+  voltage, force) — pairs naturally with the electronics module
+- **History/persistence** — SQLite-backed calculation log, viewable via
+  `toolkit history`; impossible on the original hardware due to RAM reset,
+  trivial here
+- **JSON output flag** (`--json`) across all commands, for scripting/piping
+- **Shell completion** — `typer` supports this out of the box
+- **Batch/scripting mode** — run a sequence of commands from a `.txt` file,
+  output a report
+- **Config file** — `~/.config/ti84toolkit/config.toml` for default gravity
+  constant, decimal precision, color theme
 - **Gamification** — badge system / easter eggs, per the original doc's V2 plan
 
-Already brought forward from the original V2 roadmap: the truth table
-generator and boolean expression evaluator (originally deferred as "advanced
-logic tools") are implemented in the Logic module. The kinematics solver also
-goes beyond the original scope by solving all 10 possible combinations of
-3-known-of-5 variables generally via sympy, rather than a lookup table of the
-classic SUVAT equations.
+Already brought forward from the original V2 wishlist: the truth table
+generator and boolean expression evaluator (Logic module), and a fully
+general sympy-backed kinematics solver (Physics module) rather than a lookup
+table of the classic SUVAT equations.
 
 ## Design Notes
 

@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from core.validation import ValidationError, prompt_float
-from modules import electronics, logic, math_tools, physics
+from modules import electronics, logic, math_tools, physics, statistics_tools
 
 console = Console()
 
@@ -365,6 +365,99 @@ def _physics_menu() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Statistics submenu
+# ---------------------------------------------------------------------------
+
+
+def _prompt_data_list() -> list[float]:
+    from core.validation import ValidationError as VE, parse_float
+
+    raw = Prompt.ask("Data points (space-separated, e.g. 2 4 4 5 7 9)")
+    values = []
+    for tok in raw.split():
+        values.append(parse_float(tok, "data point"))
+    return values
+
+
+def _menu_describe() -> None:
+    _header("Descriptive Statistics")
+
+    try:
+        data = _prompt_data_list()
+        result = statistics_tools.describe(data)
+        console.print(f"\n[green]n:[/green] {result.count}    [green]Sum:[/green] {result.sum:g}")
+        console.print(f"[green]Mean:[/green] {result.mean:g}    [green]Median:[/green] {result.median:g}")
+        mode_str = ", ".join(f"{m:g}" for m in result.mode) if result.mode else "none"
+        console.print(f"[green]Mode:[/green] {mode_str}")
+        console.print(f"[green]Range:[/green] {result.data_range:g}  (min {result.minimum:g}, max {result.maximum:g})")
+        console.print(f"[green]Population variance / stdev:[/green] {result.variance_population:g} / {result.stdev_population:g}")
+        if result.variance_sample is not None:
+            console.print(f"[green]Sample variance / stdev:[/green] {result.variance_sample:g} / {result.stdev_sample:g}")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _menu_quartiles() -> None:
+    _header("Five-Number Summary")
+
+    try:
+        data = _prompt_data_list()
+        result = statistics_tools.five_number_summary(data)
+        console.print(f"\n[green]Min:[/green] {result.minimum:g}   [green]Q1:[/green] {result.q1:g}")
+        console.print(f"[green]Median:[/green] {result.median:g}   [green]Q3:[/green] {result.q3:g}")
+        console.print(f"[green]Max:[/green] {result.maximum:g}   [green]IQR:[/green] {result.iqr:g}")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _menu_combinatorics() -> None:
+    _header("Combinatorics")
+    console.print("1. Factorial (n!)\n2. Permutations (nPr)\n3. Combinations (nCr)\n")
+
+    choice = Prompt.ask("Select", choices=["1", "2", "3"], show_choices=False)
+
+    try:
+        if choice == "1":
+            n = int(prompt_float("n"))
+            result = statistics_tools.factorial(n)
+            console.print(f"\n[green]{n}! = {result}[/green]")
+        elif choice == "2":
+            n = int(prompt_float("n"))
+            r = int(prompt_float("r"))
+            result = statistics_tools.permutations(n, r)
+            console.print(f"\n[green]{n}P{r} = {result}[/green]")
+        else:
+            n = int(prompt_float("n"))
+            r = int(prompt_float("r"))
+            result = statistics_tools.combinations(n, r)
+            console.print(f"\n[green]{n}C{r} = {result}[/green]")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _statistics_menu() -> None:
+    while True:
+        _header("Statistics")
+        console.print("1. Descriptive Statistics")
+        console.print("2. Five-Number Summary (Quartiles)")
+        console.print("3. Combinatorics (n!, nPr, nCr)")
+        console.print("0. Back\n")
+
+        choice = Prompt.ask("Select", choices=["0", "1", "2", "3"], show_choices=False)
+        if choice == "0":
+            return
+        elif choice == "1":
+            _menu_describe()
+        elif choice == "2":
+            _menu_quartiles()
+        elif choice == "3":
+            _menu_combinatorics()
+
+
+# ---------------------------------------------------------------------------
 # Main menu
 # ---------------------------------------------------------------------------
 
@@ -376,9 +469,10 @@ def main_menu() -> None:
         console.print("2. Math")
         console.print("3. Physics")
         console.print("4. Logic")
+        console.print("5. Statistics")
         console.print("0. Exit\n")
 
-        choice = Prompt.ask("Select", choices=["0", "1", "2", "3", "4"], show_choices=False)
+        choice = Prompt.ask("Select", choices=["0", "1", "2", "3", "4", "5"], show_choices=False)
         if choice == "0":
             console.print("\n[cyan]Goodbye.[/cyan]")
             return
@@ -390,3 +484,5 @@ def main_menu() -> None:
             _physics_menu()
         elif choice == "4":
             _logic_menu()
+        elif choice == "5":
+            _statistics_menu()
