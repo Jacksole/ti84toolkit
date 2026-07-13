@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from core.validation import ValidationError, prompt_float
-from modules import electronics, logic, math_tools, physics, statistics_tools
+from modules import electronics, logic, math_tools, physics, statistics_tools, units
 
 console = Console()
 
@@ -458,6 +458,30 @@ def _statistics_menu() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Units submenu
+# ---------------------------------------------------------------------------
+
+
+def _menu_units() -> None:
+    _header("Unit Conversion")
+    console.print(f"Categories: {', '.join(units.CATEGORY_NAMES)}\n")
+
+    category = Prompt.ask("Category").strip().lower()
+
+    try:
+        valid_units = units.units_for_category(category)
+        console.print(f"[dim]Units: {', '.join(valid_units)}[/dim]\n")
+        value = prompt_float("Value")
+        from_unit = Prompt.ask("From unit")
+        to_unit = Prompt.ask("To unit")
+        result = units.convert(category, value, from_unit, to_unit)
+        console.print(f"\n[green]{result.value:g} {result.from_unit} = {result.result:g} {result.to_unit}[/green]")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+# ---------------------------------------------------------------------------
 # Main menu
 # ---------------------------------------------------------------------------
 
@@ -470,9 +494,10 @@ def main_menu() -> None:
         console.print("3. Physics")
         console.print("4. Logic")
         console.print("5. Statistics")
+        console.print("6. Unit Conversion")
         console.print("0. Exit\n")
 
-        choice = Prompt.ask("Select", choices=["0", "1", "2", "3", "4", "5"], show_choices=False)
+        choice = Prompt.ask("Select", choices=["0", "1", "2", "3", "4", "5", "6"], show_choices=False)
         if choice == "0":
             console.print("\n[cyan]Goodbye.[/cyan]")
             return
@@ -486,3 +511,5 @@ def main_menu() -> None:
             _logic_menu()
         elif choice == "5":
             _statistics_menu()
+        elif choice == "6":
+            _menu_units()

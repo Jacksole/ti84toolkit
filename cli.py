@@ -7,23 +7,35 @@ Run with a subcommand for direct, scriptable access:
     toolkit electronics ohms-law --voltage 5 --resistance 100
     toolkit electronics resistor red red brown gold
     toolkit electronics timer555 --r1 1000 --r2 1000 --c 0.000001
+
+Add --json anywhere before the subcommand for machine-readable output:
+
+    toolkit --json math solve "2*x + 3 = 7"
+
+Every successful calculation is logged to a local SQLite history
+(~/.ti84toolkit/history.db) -- see `toolkit history --help`.
 """
 from __future__ import annotations
 
-from typing import Optional
+import json
+import shlex
+from pathlib import Path
+from typing import Callable, Optional
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
+from core import badges, config, history
 from core.menu import main_menu
 from core.validation import ValidationError
-from modules import electronics, logic, math_tools, physics, statistics_tools
+from modules import electronics, logic, math_tools, physics, statistics_tools, units
 
 console = Console()
 
 app = typer.Typer(
     name="toolkit",
-    help="TI-84 Embedded Systems Toolkit -- electronics, math, physics, logic, and statistics utilities.",
+    help="TI-84 Embedded Systems Toolkit -- electronics, math, physics, logic, statistics, and unit conversion.",
     no_args_is_help=False,
 )
 
@@ -42,12 +54,58 @@ app.add_typer(physics_app, name="physics")
 stats_app = typer.Typer(help="Statistics: descriptive stats, quartiles, combinatorics (nPr/nCr).")
 app.add_typer(stats_app, name="stats")
 
+units_app = typer.Typer(help="Unit conversion: length, mass, time, temperature, and electrical units.")
+app.add_typer(units_app, name="units")
+
+history_app = typer.Typer(help="View or clear locally saved calculation history.")
+app.add_typer(history_app, name="history")
+
+
+# ---------------------------------------------------------------------------
+# Global state (JSON mode) + shared helpers
+# ---------------------------------------------------------------------------
+
+_json_mode = False
+
 
 @app.callback(invoke_without_command=True)
-def root(ctx: typer.Context) -> None:
+def root(
+    ctx: typer.Context,
+    json_output: bool = typer.Option(
+        False, "--json", help="Output machine-readable JSON instead of formatted text."
+    ),
+) -> None:
     """No subcommand given -> launch the interactive menu."""
+    global _json_mode
+    _json_mode = json_output
     if ctx.invoked_subcommand is None:
         main_menu()
+
+
+def emit(data: dict, render: Callable[[], None]) -> None:
+    """Print `data` as JSON if --json was passed, otherwise call `render()` for human output."""
+    if _json_mode:
+        console.print(json.dumps(data, indent=2, default=str))
+    else:
+        render()
+
+
+def log_calculation(module: str, operation: str, inputs: dict, result_str: str) -> None:
+    """Log a calculation to history and announce a badge if a milestone was just crossed."""
+    history.log_entry(module, operation, inputs, result_str)
+    if not _json_mode:
+        badge = badges.badge_for_count(history.count_entries())
+        if badge:
+            name, description = badge
+            console.print(f"\n[bold yellow]{name}[/bold yellow] -- {description}")
+
+
+def _fail(e: ValidationError) -> None:
+    if _json_mode:
+        console.print(json.dumps({"error": str(e)}, indent=2))
+    else:
+        console.print(f"[red]Error:[/red] {e}")
+    raise typer.Exit(code=1)
 
 
 # ---------------------------------------------------------------------------
@@ -65,14 +123,22 @@ def ohms_law_cmd(
     try:
         result = electronics.ohms_law(voltage, current, resistance)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
-    console.print(f"[green]Solved for {result.solved_for}[/green]")
-    console.print(f"  V = {result.voltage:g} V")
-    console.print(f"  I = {result.current:g} A")
-    console.print(f"  R = {result.resistance:g} Ω")
-    console.print(f"  P = {result.power:g} W")
+    data = {
+        "solved_for": result.solved_for, "voltage": result.voltage,
+        "current": result.current, "resistance": result.resistance, "power": result.power,
+    }
+
+    def render():
+        console.print(f"[green]Solved for {result.solved_for}[/green]")
+        console.print(f"  V = {result.voltage:g} V")
+        console.print(f"  I = {result.current:g} A")
+        console.print(f"  R = {result.resistance:g} \u03a9")
+        console.print(f"  P = {result.power:g} W")
+
+    emit(data, render)
+    log_calculation("electronics", "ohms-law", {"voltage": voltage, "current": current, "resistance": resistance}, f"V={result.voltage:g},I={result.current:g},R={result.resistance:g}")
 
 
 # ---------------------------------------------------------------------------
@@ -88,11 +154,16 @@ def resistor_cmd(
     try:
         result = electronics.resistor_color_code(bands)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
-    console.print(f"[green]Resistance:[/green] {result.display}")
-    console.print(f"[green]Tolerance:[/green] {result.tolerance}")
+    data = {"ohms": result.ohms, "tolerance": result.tolerance, "display": result.display}
+
+    def render():
+        console.print(f"[green]Resistance:[/green] {result.display}")
+        console.print(f"[green]Tolerance:[/green] {result.tolerance}")
+
+    emit(data, render)
+    log_calculation("electronics", "resistor", {"bands": bands}, f"{result.display} {result.tolerance}")
 
 
 # ---------------------------------------------------------------------------
@@ -110,19 +181,25 @@ def timer555_cmd(
     try:
         result = electronics.timer_555_astable(r1, r2, c)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
-    console.print(f"[green]Frequency:[/green] {result.frequency_hz:.2f} Hz")
-    console.print(f"[green]Period:[/green] {result.period_s * 1000:.4f} ms")
-    console.print(f"[green]Duty Cycle:[/green] {result.duty_cycle_pct:.2f}%")
-    console.print(f"[green]Time High:[/green] {result.time_high_s * 1000:.4f} ms")
-    console.print(f"[green]Time Low:[/green] {result.time_low_s * 1000:.4f} ms")
+    data = {
+        "frequency_hz": result.frequency_hz, "period_s": result.period_s,
+        "duty_cycle_pct": result.duty_cycle_pct, "time_high_s": result.time_high_s, "time_low_s": result.time_low_s,
+    }
+
+    def render():
+        console.print(f"[green]Frequency:[/green] {result.frequency_hz:.2f} Hz")
+        console.print(f"[green]Period:[/green] {result.period_s * 1000:.4f} ms")
+        console.print(f"[green]Duty Cycle:[/green] {result.duty_cycle_pct:.2f}%")
+        console.print(f"[green]Time High:[/green] {result.time_high_s * 1000:.4f} ms")
+        console.print(f"[green]Time Low:[/green] {result.time_low_s * 1000:.4f} ms")
+
+    emit(data, render)
+    log_calculation("electronics", "timer555", {"r1": r1, "r2": r2, "c": c}, f"{result.frequency_hz:.2f} Hz")
 
 
 def _render_truth_table(result, title: str) -> None:
-    from rich.table import Table
-
     table = Table(title=title)
     for var in result.variables:
         table.add_column(var, justify="center")
@@ -151,10 +228,11 @@ def gate_cmd(
         bool_inputs = [_parse_bool(i) for i in inputs]
         result = logic.evaluate_gate(gate, bool_inputs)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
-    console.print(f"[green]{gate.upper()}({', '.join(inputs)}) = {result}[/green]")
+    data = {"gate": gate.upper(), "inputs": inputs, "result": result}
+    emit(data, lambda: console.print(f"[green]{gate.upper()}({', '.join(inputs)}) = {result}[/green]"))
+    log_calculation("logic", "gate", {"gate": gate, "inputs": inputs}, str(result))
 
 
 def _parse_bool(value: str) -> bool:
@@ -187,10 +265,16 @@ def truth_table_cmd(
         else:
             result = logic.expression_truth_table(expression)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
-    _render_truth_table(result, expression.upper())
+    if _json_mode:
+        console.print(json.dumps({
+            "variables": result.variables,
+            "rows": [{"inputs": combo, "output": out} for combo, out in result.rows],
+        }, indent=2))
+    else:
+        _render_truth_table(result, expression.upper())
+    log_calculation("logic", "truth-table", {"expression": expression, "inputs": inputs}, f"{len(result.rows)} rows")
 
 
 # ---------------------------------------------------------------------------
@@ -208,16 +292,22 @@ def quadratic_cmd(
     try:
         result = math_tools.quadratic_solve(a, b, c)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
-    console.print(f"[green]Discriminant:[/green] {result.discriminant:g} ({result.nature})")
-    for i, root in enumerate(result.roots, 1):
-        real = root.real + 0.0  # normalize -0.0 to 0.0
-        if root.imag == 0:
-            console.print(f"  x{i} = {real:g}")
-        else:
-            console.print(f"  x{i} = {real:g} {'+' if root.imag >= 0 else '-'} {abs(root.imag):g}i")
+    roots_str = [str(complex(r.real + 0.0, r.imag)) for r in result.roots]
+    data = {"discriminant": result.discriminant, "nature": result.nature, "roots": roots_str}
+
+    def render():
+        console.print(f"[green]Discriminant:[/green] {result.discriminant:g} ({result.nature})")
+        for i, root in enumerate(result.roots, 1):
+            real = root.real + 0.0
+            if root.imag == 0:
+                console.print(f"  x{i} = {real:g}")
+            else:
+                console.print(f"  x{i} = {real:g} {'+' if root.imag >= 0 else '-'} {abs(root.imag):g}i")
+
+    emit(data, render)
+    log_calculation("math", "quadratic", {"a": a, "b": b, "c": c}, result.nature)
 
 
 # ---------------------------------------------------------------------------
@@ -235,12 +325,16 @@ def trig_cmd(
     try:
         result = math_tools.trig_evaluate(function, value, unit)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
     is_inverse = function.strip().lower().startswith("a")
-    out_unit = unit if is_inverse else ""
-    console.print(f"[green]{function}({value}) = {result:g}{' ' + unit if is_inverse else ''}[/green]")
+    data = {"function": function, "value": value, "unit": unit, "result": result}
+
+    def render():
+        console.print(f"[green]{function}({value}) = {result:g}{' ' + unit if is_inverse else ''}[/green]")
+
+    emit(data, render)
+    log_calculation("math", "trig", {"function": function, "value": value, "unit": unit}, f"{result:g}")
 
 
 # ---------------------------------------------------------------------------
@@ -257,10 +351,11 @@ def solve_cmd(
     try:
         result = math_tools.solve_equation(equation, variable)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
-    console.print(f"[green]{result.variable} = {', '.join(result.solutions)}[/green]")
+    data = {"variable": result.variable, "solutions": result.solutions}
+    emit(data, lambda: console.print(f"[green]{result.variable} = {', '.join(result.solutions)}[/green]"))
+    log_calculation("math", "solve", {"equation": equation, "variable": variable}, ", ".join(result.solutions))
 
 
 # ---------------------------------------------------------------------------
@@ -280,15 +375,20 @@ def kinematics_cmd(
     try:
         result = physics.kinematics_solve(v0, v, a, t, d)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
-    console.print(f"[green]Solved for {' and '.join(result.solved_for)}:[/green]")
-    console.print(f"  v0 = {result.values['v0']:g} m/s")
-    console.print(f"  v  = {result.values['v']:g} m/s")
-    console.print(f"  a  = {result.values['a']:g} m/s²")
-    console.print(f"  t  = {result.values['t']:g} s")
-    console.print(f"  d  = {result.values['d']:g} m")
+    data = {"solved_for": result.solved_for, **result.values}
+
+    def render():
+        console.print(f"[green]Solved for {' and '.join(result.solved_for)}:[/green]")
+        console.print(f"  v0 = {result.values['v0']:g} m/s")
+        console.print(f"  v  = {result.values['v']:g} m/s")
+        console.print(f"  a  = {result.values['a']:g} m/s\u00b2")
+        console.print(f"  t  = {result.values['t']:g} s")
+        console.print(f"  d  = {result.values['d']:g} m")
+
+    emit(data, render)
+    log_calculation("physics", "kinematics", {"v0": v0, "v": v, "a": a, "t": t, "d": d}, f"solved {result.solved_for}")
 
 
 # ---------------------------------------------------------------------------
@@ -302,12 +402,15 @@ def energy_cmd(
     mass: Optional[float] = typer.Option(None, "--mass", help="Mass in kg (kinetic/potential)"),
     velocity: Optional[float] = typer.Option(None, "--velocity", help="Velocity in m/s (kinetic)"),
     height: Optional[float] = typer.Option(None, "--height", help="Height in m (potential)"),
-    gravity: float = typer.Option(9.81, "--gravity", help="Gravity in m/s^2 (potential, default Earth)"),
+    gravity: Optional[float] = typer.Option(
+        None, "--gravity", help="Gravity in m/s^2 (potential; defaults to config or Earth's 9.81)"
+    ),
     force: Optional[float] = typer.Option(None, "--force", help="Force in N (work)"),
     distance: Optional[float] = typer.Option(None, "--distance", help="Distance in m (work)"),
 ) -> None:
     """Compute kinetic energy, gravitational potential energy, or work done."""
     kind = kind.strip().lower()
+    g = gravity if gravity is not None else config.get_gravity()
     try:
         if kind == "kinetic":
             if mass is None or velocity is None:
@@ -316,7 +419,7 @@ def energy_cmd(
         elif kind == "potential":
             if mass is None or height is None:
                 raise ValidationError("potential energy requires --mass and --height.")
-            result = physics.potential_energy(mass, height, gravity)
+            result = physics.potential_energy(mass, height, g)
         elif kind == "work":
             if force is None or distance is None:
                 raise ValidationError("work requires --force and --distance.")
@@ -324,10 +427,11 @@ def energy_cmd(
         else:
             raise ValidationError("kind must be one of: kinetic, potential, work.")
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
-    console.print(f"[green]{result.label}:[/green] {result.joules:g} J")
+    data = {"kind": kind, "label": result.label, "joules": result.joules}
+    emit(data, lambda: console.print(f"[green]{result.label}:[/green] {result.joules:g} J"))
+    log_calculation("physics", "energy", {"kind": kind, "mass": mass, "velocity": velocity, "height": height, "force": force, "distance": distance}, f"{result.joules:g} J")
 
 
 # ---------------------------------------------------------------------------
@@ -351,10 +455,11 @@ def power_cmd(
         else:
             raise ValidationError("Provide either (--work and --time) or (--force and --velocity).")
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
-    console.print(f"[green]Power:[/green] {result.watts:g} W")
+    data = {"watts": result.watts}
+    emit(data, lambda: console.print(f"[green]Power:[/green] {result.watts:g} W"))
+    log_calculation("physics", "power", {"work": work, "time": time, "force": force, "velocity": velocity}, f"{result.watts:g} W")
 
 
 # ---------------------------------------------------------------------------
@@ -364,23 +469,33 @@ def power_cmd(
 
 @stats_app.command("describe")
 def describe_cmd(
-    data: list[float] = typer.Argument(..., help="Data points, e.g. 2 4 4 5 7 9 (use -- before negative values)"),
+    data_points: list[float] = typer.Argument(..., help="Data points, e.g. 2 4 4 5 7 9 (use -- before negative values)"),
 ) -> None:
     """Compute descriptive statistics (mean, median, mode, variance, std dev, range)."""
     try:
-        result = statistics_tools.describe(data)
+        result = statistics_tools.describe(data_points)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
-    console.print(f"[green]n:[/green] {result.count}    [green]Sum:[/green] {result.sum:g}")
-    console.print(f"[green]Mean:[/green] {result.mean:g}    [green]Median:[/green] {result.median:g}")
-    mode_str = ", ".join(f"{m:g}" for m in result.mode) if result.mode else "none"
-    console.print(f"[green]Mode:[/green] {mode_str}")
-    console.print(f"[green]Range:[/green] {result.data_range:g}  (min {result.minimum:g}, max {result.maximum:g})")
-    console.print(f"[green]Population variance / stdev:[/green] {result.variance_population:g} / {result.stdev_population:g}")
-    if result.variance_sample is not None:
-        console.print(f"[green]Sample variance / stdev:[/green] {result.variance_sample:g} / {result.stdev_sample:g}")
+    payload = {
+        "count": result.count, "sum": result.sum, "mean": result.mean, "median": result.median,
+        "mode": result.mode, "variance_sample": result.variance_sample, "stdev_sample": result.stdev_sample,
+        "variance_population": result.variance_population, "stdev_population": result.stdev_population,
+        "min": result.minimum, "max": result.maximum, "range": result.data_range,
+    }
+
+    def render():
+        console.print(f"[green]n:[/green] {result.count}    [green]Sum:[/green] {result.sum:g}")
+        console.print(f"[green]Mean:[/green] {result.mean:g}    [green]Median:[/green] {result.median:g}")
+        mode_str = ", ".join(f"{m:g}" for m in result.mode) if result.mode else "none"
+        console.print(f"[green]Mode:[/green] {mode_str}")
+        console.print(f"[green]Range:[/green] {result.data_range:g}  (min {result.minimum:g}, max {result.maximum:g})")
+        console.print(f"[green]Population variance / stdev:[/green] {result.variance_population:g} / {result.stdev_population:g}")
+        if result.variance_sample is not None:
+            console.print(f"[green]Sample variance / stdev:[/green] {result.variance_sample:g} / {result.stdev_sample:g}")
+
+    emit(payload, render)
+    log_calculation("stats", "describe", {"n": len(data_points)}, f"mean={result.mean:g}")
 
 
 # ---------------------------------------------------------------------------
@@ -390,18 +505,23 @@ def describe_cmd(
 
 @stats_app.command("quartiles")
 def quartiles_cmd(
-    data: list[float] = typer.Argument(..., help="Data points (use -- before negative values)"),
+    data_points: list[float] = typer.Argument(..., help="Data points (use -- before negative values)"),
 ) -> None:
     """Compute the five-number summary (min, Q1, median, Q3, max) and IQR."""
     try:
-        result = statistics_tools.five_number_summary(data)
+        result = statistics_tools.five_number_summary(data_points)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        _fail(e)
 
-    console.print(f"[green]Min:[/green] {result.minimum:g}   [green]Q1:[/green] {result.q1:g}")
-    console.print(f"[green]Median:[/green] {result.median:g}   [green]Q3:[/green] {result.q3:g}")
-    console.print(f"[green]Max:[/green] {result.maximum:g}   [green]IQR:[/green] {result.iqr:g}")
+    payload = {"min": result.minimum, "q1": result.q1, "median": result.median, "q3": result.q3, "max": result.maximum, "iqr": result.iqr}
+
+    def render():
+        console.print(f"[green]Min:[/green] {result.minimum:g}   [green]Q1:[/green] {result.q1:g}")
+        console.print(f"[green]Median:[/green] {result.median:g}   [green]Q3:[/green] {result.q3:g}")
+        console.print(f"[green]Max:[/green] {result.maximum:g}   [green]IQR:[/green] {result.iqr:g}")
+
+    emit(payload, render)
+    log_calculation("stats", "quartiles", {"n": len(data_points)}, f"median={result.median:g}")
 
 
 # ---------------------------------------------------------------------------
@@ -410,14 +530,14 @@ def quartiles_cmd(
 
 
 @stats_app.command("factorial")
-def factorial_cmd(n: int = typer.Argument(..., help="n! ")) -> None:
+def factorial_cmd(n: int = typer.Argument(..., help="n!")) -> None:
     """Compute n factorial."""
     try:
         result = statistics_tools.factorial(n)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
-    console.print(f"[green]{n}! = {result}[/green]")
+        _fail(e)
+    emit({"n": n, "result": result}, lambda: console.print(f"[green]{n}! = {result}[/green]"))
+    log_calculation("stats", "factorial", {"n": n}, str(result))
 
 
 @stats_app.command("npr")
@@ -429,9 +549,9 @@ def npr_cmd(
     try:
         result = statistics_tools.permutations(n, r)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
-    console.print(f"[green]{n}P{r} = {result}[/green]")
+        _fail(e)
+    emit({"n": n, "r": r, "result": result}, lambda: console.print(f"[green]{n}P{r} = {result}[/green]"))
+    log_calculation("stats", "npr", {"n": n, "r": r}, str(result))
 
 
 @stats_app.command("ncr")
@@ -443,9 +563,125 @@ def ncr_cmd(
     try:
         result = statistics_tools.combinations(n, r)
     except ValidationError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        _fail(e)
+    emit({"n": n, "r": r, "result": result}, lambda: console.print(f"[green]{n}C{r} = {result}[/green]"))
+    log_calculation("stats", "ncr", {"n": n, "r": r}, str(result))
+
+
+# ---------------------------------------------------------------------------
+# units convert / list-units
+# ---------------------------------------------------------------------------
+
+
+@units_app.command("convert")
+def units_convert_cmd(
+    category: str = typer.Argument(..., help=f"Category: {', '.join(units.CATEGORY_NAMES)}"),
+    value: float = typer.Argument(..., help="Value to convert (use -- before negative values)"),
+    from_unit: str = typer.Argument(..., help="Source unit"),
+    to_unit: str = typer.Argument(..., help="Target unit"),
+) -> None:
+    """Convert a value between units within a category."""
+    try:
+        result = units.convert(category, value, from_unit, to_unit)
+    except ValidationError as e:
+        _fail(e)
+
+    data = {"category": result.category, "value": result.value, "from": result.from_unit, "to": result.to_unit, "result": result.result}
+
+    def render():
+        console.print(f"[green]{result.value:g} {result.from_unit} = {result.result:g} {result.to_unit}[/green]")
+
+    emit(data, render)
+    log_calculation("units", "convert", {"category": category, "value": value, "from": from_unit, "to": to_unit}, f"{result.result:g} {to_unit}")
+
+
+@units_app.command("list-units")
+def units_list_cmd(category: str = typer.Argument(..., help=f"Category: {', '.join(units.CATEGORY_NAMES)}")) -> None:
+    """List valid unit names for a category."""
+    try:
+        unit_list = units.units_for_category(category)
+    except ValidationError as e:
+        _fail(e)
+    emit({"category": category, "units": unit_list}, lambda: console.print(f"[green]{category}:[/green] {', '.join(unit_list)}"))
+
+
+# ---------------------------------------------------------------------------
+# history show / clear
+# ---------------------------------------------------------------------------
+
+
+@history_app.command("show")
+def history_show_cmd(
+    limit: int = typer.Option(20, "--limit", "-n", help="Max number of entries to show"),
+    module: Optional[str] = typer.Option(None, "--module", "-m", help="Filter by module (e.g. electronics)"),
+) -> None:
+    """Show recent calculation history."""
+    entries = history.get_history(limit=limit, module=module)
+
+    if _json_mode:
+        console.print(json.dumps([
+            {"id": e.id, "timestamp": e.timestamp, "module": e.module, "operation": e.operation, "inputs": e.inputs, "result": e.result}
+            for e in entries
+        ], indent=2))
+        return
+
+    if not entries:
+        console.print("[yellow]No calculation history yet.[/yellow]")
+        return
+
+    table = Table(title="Calculation History")
+    table.add_column("ID", justify="right")
+    table.add_column("Time")
+    table.add_column("Module")
+    table.add_column("Operation")
+    table.add_column("Result")
+    for e in entries:
+        table.add_row(str(e.id), e.timestamp, e.module, e.operation, e.result)
+    console.print(table)
+
+
+@history_app.command("clear")
+def history_clear_cmd(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt"),
+) -> None:
+    """Delete all saved calculation history."""
+    if not yes and not _json_mode:
+        confirmed = typer.confirm("Delete all calculation history? This cannot be undone.")
+        if not confirmed:
+            console.print("Cancelled.")
+            raise typer.Exit()
+
+    removed = history.clear_history()
+    emit({"deleted": removed}, lambda: console.print(f"[green]Deleted {removed} history entries.[/green]"))
+
+
+# ---------------------------------------------------------------------------
+# batch mode
+# ---------------------------------------------------------------------------
+
+
+@app.command("batch")
+def batch_cmd(
+    file: Path = typer.Argument(..., help="Path to a text file of toolkit commands, one per line"),
+) -> None:
+    """Run a sequence of toolkit commands from a file (one command's arguments per line, '#' for comments)."""
+    from typer.testing import CliRunner
+
+    if not file.exists():
+        console.print(f"[red]Error:[/red] file not found: {file}")
         raise typer.Exit(code=1)
-    console.print(f"[green]{n}C{r} = {result}[/green]")
+
+    lines = [ln.strip() for ln in file.read_text().splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    if not lines:
+        console.print("[yellow]No commands found in batch file.[/yellow]")
+        return
+
+    runner = CliRunner()
+    for line in lines:
+        console.print(f"[bold cyan]$ toolkit {line}[/bold cyan]")
+        result = runner.invoke(app, shlex.split(line))
+        console.print(result.output.rstrip() or "[dim](no output)[/dim]")
+        console.print()
 
 
 if __name__ == "__main__":
