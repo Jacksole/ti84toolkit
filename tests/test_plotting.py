@@ -35,3 +35,27 @@ class TestPlot555Waveform:
         output = tmp_path / "waveform.png"
         with pytest.raises(ValidationError):
             plotting.plot_555_waveform(frequency_hz=0, duty_cycle_pct=50, output_path=str(output))
+
+
+class TestPlotHohmannTransfer:
+    def test_creates_png_file(self, tmp_path):
+        output = tmp_path / "hohmann.png"
+        result = plotting.plot_hohmann_transfer(6_671_000, 42_164_000, str(output))
+        assert result == str(output)
+        assert output.exists()
+        assert output.stat().st_size > 0
+
+    def test_works_for_lowering_orbit(self, tmp_path):
+        output = tmp_path / "hohmann_lower.png"
+        result = plotting.plot_hohmann_transfer(42_164_000, 6_671_000, str(output))
+        assert output.exists()
+
+    def test_rejects_equal_radii(self, tmp_path):
+        output = tmp_path / "hohmann.png"
+        with pytest.raises(ValidationError):
+            plotting.plot_hohmann_transfer(7_000_000, 7_000_000, str(output))
+
+    def test_rejects_nonpositive_radii(self, tmp_path):
+        output = tmp_path / "hohmann.png"
+        with pytest.raises(ValidationError):
+            plotting.plot_hohmann_transfer(0, 42_164_000, str(output))
