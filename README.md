@@ -12,7 +12,8 @@ loss on reset.
 **V1 complete** (Electronics, Logic, Math, Physics) **+ V2 complete**
 (Statistics, Unit Conversion, History/Persistence, JSON output, Batch mode,
 Config file, Gamification, Shell completion) **+ V3 complete** (CI, Plotting,
-Circuit Diagrams, Show-Your-Work, Resistor BOM Finder).
+Circuit Diagrams, Show-Your-Work, Resistor BOM Finder) **+ V4 complete**
+(Orbital Mechanics: Kepler's laws, Kepler's equation, Hohmann transfer).
 
 ## Install
 
@@ -125,11 +126,19 @@ toolkit electronics timer555 --r1 1000 --r2 1000 --c 0.000001 --diagram
 # Resistor combo finder -- closest standard single/series/parallel match
 toolkit electronics bom 4700
 toolkit electronics bom 4700 --series E12
+
+# Orbital mechanics -- period, velocity, Kepler's equation, Hohmann transfer
+toolkit orbital period --a 6779000 --body earth
+toolkit orbital velocity --r 6779000 --kind circular --body earth
+toolkit orbital velocity --r 6779000 --kind escape --body earth
+toolkit orbital kepler-equation 1.0 0.5 --steps
+toolkit orbital hohmann --r1 6671000 --r2 42164000 --body earth --steps --plot
 ```
 
 Run `toolkit electronics --help`, `toolkit logic --help`, `toolkit math --help`,
-`toolkit physics --help`, `toolkit stats --help`, `toolkit units --help`, or
-`toolkit history --help` to see all options for any command.
+`toolkit physics --help`, `toolkit stats --help`, `toolkit units --help`,
+`toolkit history --help`, or `toolkit orbital --help` to see all options for
+any command.
 
 ### Shell completion
 
@@ -215,6 +224,24 @@ and returns the closest single resistor, series pair, and parallel pair —
 answers "I need 4.7kΩ, what do I actually have on hand?" instead of just
 decoding a resistor you already hold.
 
+### Orbital mechanics
+
+Two-body Kepler mechanics and Hohmann transfer orbits — `toolkit orbital
+period`, `velocity`, `kepler-equation`, `hohmann`. Deliberately scoped to
+math that could plausibly have run on the original calculator: closed-form
+equations (Kepler's Third Law, vis-viva, circular/escape velocity) plus one
+Newton-Raphson iteration for Kepler's equation (transcendental, but iterative
+root-finding is exactly what TI-BASIC's loops handle). `--body earth` (also
+moon/mars/sun/jupiter) supplies the right gravitational parameter without
+looking it up by hand. `--steps` shows the derivation, `--plot` on `hohmann`
+saves a diagram of both orbits and the connecting transfer ellipse.
+
+N-body simulation (3+ mutually gravitating bodies) is explicitly out of
+scope: unlike everything else in this toolkit, it has no closed-form
+solution and requires numerical integration over many timesteps — genuinely
+new capability rather than something the original hardware could plausibly
+have done, if given unlimited memory.
+
 ## Project Structure
 
 ```
@@ -235,10 +262,11 @@ ti84toolkit/
 │   ├── physics.py            # Kinematics solver (sympy-backed), energy, power
 │   ├── statistics_tools.py   # Descriptive stats, quartiles, combinatorics (nPr/nCr)
 │   ├── units.py              # Length, mass, time, temperature, electrical unit conversion
-│   ├── plotting.py           # Kinematics/555 timer chart generation (matplotlib)
+│   ├── plotting.py           # Kinematics/555 timer/Hohmann transfer chart generation (matplotlib)
 │   ├── circuits.py           # Resistor color-band + 555 astable schematic diagrams
-│   └── resistor_bom.py       # Standard-value resistor combination finder
-├── tests/                    # 157 tests total (pytest), one file per module
+│   ├── resistor_bom.py       # Standard-value resistor combination finder
+│   └── orbital.py            # Kepler's laws, Kepler's equation, Hohmann transfer
+├── tests/                    # 184 tests total (pytest), one file per module
 ├── requirements.txt
 └── setup.py
 ```
@@ -252,7 +280,7 @@ python -m pytest tests/ -v
 
 ## Roadmap
 
-All V1, V2, and V3 features are complete. Remaining ideas, if this keeps growing:
+All V1-V4 features are complete. Remaining ideas, if this keeps growing:
 
 - **Broader config coverage** — `display.precision` is parsed but not yet
   applied to output formatting
@@ -264,6 +292,8 @@ All V1, V2, and V3 features are complete. Remaining ideas, if this keeps growing
 - **More circuit diagrams** — voltage divider, RC filter, op-amp configs
 - **BOM for other components** — capacitor/inductor standard-value finder,
   alongside the existing resistor combo finder
+- **N-body simulation** — explicitly deferred (see Orbital Mechanics above);
+  would need numerical integration, not just more equations
 
 Already brought forward from earlier wishlists: truth table generator and
 boolean expression evaluator (Logic), a fully general sympy-backed
