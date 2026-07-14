@@ -13,7 +13,15 @@ loss on reset.
 (Statistics, Unit Conversion, History/Persistence, JSON output, Batch mode,
 Config file, Gamification, Shell completion) **+ V3 complete** (CI, Plotting,
 Circuit Diagrams, Show-Your-Work, Resistor BOM Finder) **+ V4 complete**
-(Orbital Mechanics: Kepler's laws, Kepler's equation, Hohmann transfer).
+(Orbital Mechanics: Kepler's laws, Kepler's equation, Hohmann transfer)
+**+ V5 complete** (Calculus, Geometry, Linear Algebra, Sequences & Series,
+Probability Distributions, Finance/TVM).
+
+Between V1 (calculator port) and V5, the toolkit now covers a full
+high-school-through-early-college math/science curriculum: algebra,
+geometry, trigonometry, calculus, linear algebra, sequences & series,
+statistics, probability, physics, orbital mechanics, digital logic, and
+electronics/finance math.
 
 ## Install
 
@@ -133,12 +141,43 @@ toolkit orbital velocity --r 6779000 --kind circular --body earth
 toolkit orbital velocity --r 6779000 --kind escape --body earth
 toolkit orbital kepler-equation 1.0 0.5 --steps
 toolkit orbital hohmann --r1 6671000 --r2 42164000 --body earth --steps --plot
+
+# Calculus -- derivatives, integrals, limits, Taylor series
+toolkit calculus derivative "x**3 + 2*x"
+toolkit calculus integral "x**2" --lower 0 --upper 3
+toolkit calculus limit "sin(x)/x" 0
+toolkit calculus taylor-series "exp(x)" --order 4
+
+# Geometry -- shapes, Pythagorean theorem, distance
+toolkit geometry circle 3
+toolkit geometry triangle-sides 3 4 5
+toolkit geometry pythagorean-hypotenuse 3 4
+toolkit geometry sphere 3
+
+# Linear algebra -- vectors and matrices (comma/semicolon-delimited)
+toolkit linalg vector-dot "1,2,3" "4,5,6"
+toolkit linalg matrix-det "1,2;3,4"
+toolkit linalg matrix-inverse "4,7;2,6"
+
+# Sequences and series
+toolkit sequences arithmetic-sum --a1 1 --d 1 --n 10
+toolkit sequences geometric-sum-infinite --a1 1 --r 0.5
+
+# Probability distributions
+toolkit probability normal-cdf 1.96
+toolkit probability binomial-pmf --n 10 --k 5 --p 0.5
+
+# Finance -- TVM solver (any 4 of n/rate/pv/pmt/fv) and compound interest
+toolkit finance tvm --n 360 --rate 6 --pv 300000 --fv 0 --steps
+toolkit finance compound-interest --principal 1000 --rate 5 --years 10
 ```
 
 Run `toolkit electronics --help`, `toolkit logic --help`, `toolkit math --help`,
 `toolkit physics --help`, `toolkit stats --help`, `toolkit units --help`,
-`toolkit history --help`, or `toolkit orbital --help` to see all options for
-any command.
+`toolkit history --help`, `toolkit orbital --help`, `toolkit calculus --help`,
+`toolkit geometry --help`, `toolkit linalg --help`, `toolkit sequences --help`,
+`toolkit probability --help`, or `toolkit finance --help` to see all options
+for any command.
 
 ### Shell completion
 
@@ -242,6 +281,55 @@ solution and requires numerical integration over many timesteps — genuinely
 new capability rather than something the original hardware could plausibly
 have done, if given unlimited memory.
 
+### Calculus
+
+`toolkit calculus derivative/integral/limit/taylor-series` — symbolic
+differentiation, indefinite/definite integration, two-sided/one-sided
+limits (including at infinity), and Taylor series expansion, all sympy-backed.
+Distinct from orbital mechanics: orbital mechanics only implements
+pre-solved formulas that were originally *derived* with calculus; this
+module lets you actually perform the calculus operations yourself.
+
+### Geometry
+
+`toolkit geometry circle/rectangle/triangle-bh/triangle-sides/
+pythagorean-hypotenuse/pythagorean-leg/distance/sphere/cylinder/cone/box` —
+area/perimeter/volume/surface-area for common 2D and 3D shapes, the
+Pythagorean theorem in either direction, and the 2D/3D distance formula.
+
+### Linear Algebra
+
+`toolkit linalg vector-dot/vector-cross/vector-magnitude/vector-normalize/
+vector-angle/matrix-add/matrix-multiply/matrix-transpose/matrix-det/
+matrix-inverse` — vectors and matrices are passed as delimited strings
+(`"1,2,3"` for vectors, `"1,2;3,4"` for matrices) to keep CLI usage simple.
+Notable inclusion: the TI-84's `[MATRX]` button and matrix editor are one of
+its signature features — a toolkit port that skipped matrices would be
+missing something the original calculator was genuinely known for.
+
+### Sequences and Series
+
+`toolkit sequences arithmetic-term/arithmetic-sum/geometric-term/
+geometric-sum/geometric-sum-infinite` — TI-84 has a dedicated SEQ graphing
+mode for exactly this material.
+
+### Probability Distributions
+
+`toolkit probability binomial-pmf/binomial-cdf/binomial-stats/normal-pdf/
+normal-cdf/normal-cdf-range/inverse-normal-cdf/z-score` — distinct from the
+statistics module (descriptive stats + combinatorics): distributions are a
+different, commonly-taught piece. TI-84's `normalcdf`/`invNorm`/`binompdf`
+are AP Statistics staples that combinatorics alone doesn't cover.
+
+### Finance
+
+`toolkit finance tvm/compound-interest` — a full Time Value of Money solver
+matching the TI-84's built-in Finance app (`APPS → Finance → TVM Solver`).
+Given any 4 of `{n, rate, pv, pmt, fv}`, solves for the 5th; n/pv/pmt/fv are
+closed-form, and the interest rate (no closed form) is solved via bisection
+— the same iterative-root-finding spirit as Kepler's equation. Sanity-checked
+against a real-world $300k/30yr/6% mortgage payment (~$1,798/month).
+
 ## Project Structure
 
 ```
@@ -266,7 +354,13 @@ ti84toolkit/
 │   ├── circuits.py           # Resistor color-band + 555 astable schematic diagrams
 │   ├── resistor_bom.py       # Standard-value resistor combination finder
 │   └── orbital.py            # Kepler's laws, Kepler's equation, Hohmann transfer
-├── tests/                    # 184 tests total (pytest), one file per module
+│   ├── calculus.py           # Symbolic derivatives, integrals, limits, Taylor series
+│   ├── geometry.py           # 2D/3D shapes, Pythagorean theorem, distance formula
+│   ├── linear_algebra.py     # Vector and matrix operations (numpy-backed)
+│   ├── sequences.py          # Arithmetic and geometric sequences/series
+│   ├── probability.py        # Binomial and normal distributions
+│   └── finance.py            # TVM solver, compound interest
+├── tests/                    # 271 tests total (pytest), one file per module
 ├── requirements.txt
 └── setup.py
 ```
@@ -280,7 +374,7 @@ python -m pytest tests/ -v
 
 ## Roadmap
 
-All V1-V4 features are complete. Remaining ideas, if this keeps growing:
+All V1-V5 features are complete. Remaining ideas, if this keeps growing:
 
 - **Broader config coverage** — `display.precision` is parsed but not yet
   applied to output formatting
@@ -294,6 +388,11 @@ All V1-V4 features are complete. Remaining ideas, if this keeps growing:
   alongside the existing resistor combo finder
 - **N-body simulation** — explicitly deferred (see Orbital Mechanics above);
   would need numerical integration, not just more equations
+- **Differential equations** — a natural calculus follow-on (sympy already
+  supports `dsolve`)
+- **Complex numbers as a first-class tool** — currently only surface
+  implicitly (quadratic solver's complex roots); TI-84 supports complex
+  arithmetic as its own mode
 
 Already brought forward from earlier wishlists: truth table generator and
 boolean expression evaluator (Logic), a fully general sympy-backed
