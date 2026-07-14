@@ -1,5 +1,7 @@
 # TI-84 Embedded Systems Toolkit — Python CLI Port
 
+![Tests](https://github.com/Jacksole/ti84toolkit/actions/workflows/test.yml/badge.svg)
+
 A Python/terminal port of the original TI-BASIC toolkit built for the TI-84 Plus.
 Same modular philosophy — efficiency, clarity, extensibility — now running as a
 real CLI instead of a calculator program, with no memory ceiling and no data
@@ -9,7 +11,8 @@ loss on reset.
 
 **V1 complete** (Electronics, Logic, Math, Physics) **+ V2 complete**
 (Statistics, Unit Conversion, History/Persistence, JSON output, Batch mode,
-Config file, Gamification, Shell completion).
+Config file, Gamification, Shell completion) **+ V3 complete** (CI, Plotting,
+Circuit Diagrams, Show-Your-Work, Resistor BOM Finder).
 
 ## Install
 
@@ -106,6 +109,22 @@ toolkit --json units convert length 1 mi km
 
 # Batch mode -- run a sequence of commands from a file
 toolkit batch my_commands.txt
+
+# Show your work -- print the step-by-step derivation
+toolkit electronics ohms-law --current 2 --resistance 100 --steps
+toolkit physics kinematics --v0 0 --a 2 --t 5 --steps
+
+# Plotting -- save a chart (headless-safe, works over SSH/WSL)
+toolkit physics kinematics --v0 0 --a 2 --t 5 --plot
+toolkit electronics timer555 --r1 1000 --r2 1000 --c 0.000001 --plot
+
+# Circuit diagrams -- save a schematic/color-band image
+toolkit electronics resistor orange orange red gold --diagram
+toolkit electronics timer555 --r1 1000 --r2 1000 --c 0.000001 --diagram
+
+# Resistor combo finder -- closest standard single/series/parallel match
+toolkit electronics bom 4700
+toolkit electronics bom 4700 --series E12
 ```
 
 Run `toolkit electronics --help`, `toolkit logic --help`, `toolkit math --help`,
@@ -159,11 +178,50 @@ Milestone badges (1 / 10 / 50 / 100 / 500 logged calculations) print
 automatically the moment you cross a threshold — a small callback to the
 original doc's V2 "badge system" idea.
 
+### Continuous integration
+
+`.github/workflows/test.yml` runs the full pytest suite on every push/PR to
+`main`, across Python 3.9–3.12.
+
+### Plotting
+
+`--plot` (kinematics, 555 timer) saves a PNG chart instead of/in addition to
+the text result:
+- Kinematics: position(t) and velocity(t) curves
+- 555 timer: the astable output square wave, duty cycle visible in the
+  high/low segment widths
+
+Uses matplotlib's Agg backend, so it works headlessly over SSH/WSL without
+an X server or WSLg.
+
+### Circuit diagrams
+
+`--diagram` (resistor, 555 timer) saves a schematic image:
+- Resistor: the physical resistor body with its actual decoded color bands
+- 555 timer: the classic astable wiring (VCC → R1 → DIS, DIS → R2 → THR,
+  THR tied to TRIG, capacitor to GND, OUT broken out) — a real schematic via
+  `schemdraw`, not just a picture
+
+### Show your work
+
+`--steps` (Ohm's Law, kinematics) prints the derivation instead of just the
+final numbers — which values were known, which equation applies, the
+substitution, and the result. Useful as a teaching aid, not just an answer key.
+
+### Resistor combo finder (BOM)
+
+`toolkit electronics bom <target>` searches standard E12/E24 resistor values
+and returns the closest single resistor, series pair, and parallel pair —
+answers "I need 4.7kΩ, what do I actually have on hand?" instead of just
+decoding a resistor you already hold.
+
 ## Project Structure
 
 ```
 ti84toolkit/
 ├── cli.py                  # Entrypoint: typer app, menu/subcommands/JSON/history/batch
+├── .github/workflows/
+│   └── test.yml             # CI: pytest across Python 3.9-3.12 on every push/PR
 ├── core/
 │   ├── menu.py              # Interactive menu system (rich-based)
 │   ├── validation.py        # Shared input validation
@@ -176,8 +234,11 @@ ti84toolkit/
 │   ├── math_tools.py         # Quadratic solver, trigonometry, sympy-backed equation solving
 │   ├── physics.py            # Kinematics solver (sympy-backed), energy, power
 │   ├── statistics_tools.py   # Descriptive stats, quartiles, combinatorics (nPr/nCr)
-│   └── units.py              # Length, mass, time, temperature, electrical unit conversion
-├── tests/                    # 131 tests total (pytest), one file per module
+│   ├── units.py              # Length, mass, time, temperature, electrical unit conversion
+│   ├── plotting.py           # Kinematics/555 timer chart generation (matplotlib)
+│   ├── circuits.py           # Resistor color-band + 555 astable schematic diagrams
+│   └── resistor_bom.py       # Standard-value resistor combination finder
+├── tests/                    # 157 tests total (pytest), one file per module
 ├── requirements.txt
 └── setup.py
 ```
@@ -191,8 +252,7 @@ python -m pytest tests/ -v
 
 ## Roadmap
 
-All V1 modules and all planned V2 additions are complete. Remaining ideas,
-if this keeps growing:
+All V1, V2, and V3 features are complete. Remaining ideas, if this keeps growing:
 
 - **Broader config coverage** — `display.precision` is parsed but not yet
   applied to output formatting
@@ -201,9 +261,12 @@ if this keeps growing:
 - **More unit categories** — area, volume, energy, pressure
 - **Richer batch mode** — variables/templating across lines, not just a
   literal command list
+- **More circuit diagrams** — voltage divider, RC filter, op-amp configs
+- **BOM for other components** — capacitor/inductor standard-value finder,
+  alongside the existing resistor combo finder
 
-Already brought forward from the original V2 wishlist: truth table generator
-and boolean expression evaluator (Logic), a fully general sympy-backed
+Already brought forward from earlier wishlists: truth table generator and
+boolean expression evaluator (Logic), a fully general sympy-backed
 kinematics solver (Physics) rather than a SUVAT lookup table, and the
 persistent calculation history that was explicitly impossible on the
 original TI-84 hardware.
