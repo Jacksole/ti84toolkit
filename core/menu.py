@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from core.validation import ValidationError, prompt_float
-from modules import electronics, logic, math_tools, physics, statistics_tools, units
+from modules import circuits, electronics, logic, math_tools, physics, plotting, resistor_bom, statistics_tools, units
 
 console = Console()
 
@@ -46,6 +46,10 @@ def _menu_ohms_law() -> None:
             f"  R = {result.resistance:g} Ω\n"
             f"  P = {result.power:g} W"
         )
+        if Prompt.ask("\nShow step-by-step derivation?", choices=["y", "n"], default="n") == "y":
+            console.print()
+            for line in result.steps:
+                console.print(f"  {line}")
     except ValidationError as e:
         console.print(f"[red]{e}[/red]")
     _pause()
@@ -63,6 +67,10 @@ def _menu_resistor() -> None:
             f"\n[green]Resistance:[/green] {result.display}  "
             f"[green]Tolerance:[/green] {result.tolerance}"
         )
+        if Prompt.ask("Save a color-band diagram image?", choices=["y", "n"], default="n") == "y":
+            path = Prompt.ask("Save as", default="resistor_diagram.png")
+            saved = circuits.draw_resistor_diagram(raw.split(), result.display, result.tolerance, path)
+            console.print(f"[dim]Saved to {saved}[/dim]")
     except ValidationError as e:
         console.print(f"[red]{e}[/red]")
     _pause()
@@ -84,6 +92,31 @@ def _menu_timer555() -> None:
             f"[green]Time High:[/green] {result.time_high_s * 1000:.4f} ms\n"
             f"[green]Time Low:[/green] {result.time_low_s * 1000:.4f} ms"
         )
+        if Prompt.ask("Save a waveform plot?", choices=["y", "n"], default="n") == "y":
+            path = Prompt.ask("Save as", default="timer555_waveform.png")
+            saved = plotting.plot_555_waveform(result.frequency_hz, result.duty_cycle_pct, path)
+            console.print(f"[dim]Saved to {saved}[/dim]")
+        if Prompt.ask("Save a circuit schematic?", choices=["y", "n"], default="n") == "y":
+            path = Prompt.ask("Save as", default="timer555_circuit.png")
+            saved = circuits.draw_555_astable_circuit(r1, r2, c, path)
+            console.print(f"[dim]Saved to {saved}[/dim]")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _menu_resistor_bom() -> None:
+    _header("Resistor Combo Finder")
+    console.print("Find the closest standard resistor(s) to a target value.\n")
+
+    target = prompt_float("Target resistance (Ω)")
+    series = Prompt.ask("Series", choices=["E12", "E24"], default="E24")
+
+    try:
+        options = resistor_bom.find_resistor_combo(target, series)
+        console.print(f"\n[green]Target:[/green] {target:g} \u03a9  [dim]({series} series)[/dim]")
+        for o in options:
+            console.print(f"  {resistor_bom.format_option(o)}")
     except ValidationError as e:
         console.print(f"[red]{e}[/red]")
     _pause()
@@ -95,9 +128,10 @@ def _electronics_menu() -> None:
         console.print("1. Ohm's Law Solver")
         console.print("2. Resistor Color Code Decoder")
         console.print("3. 555 Timer (Astable)")
+        console.print("4. Resistor Combo Finder (BOM)")
         console.print("0. Back\n")
 
-        choice = Prompt.ask("Select", choices=["0", "1", "2", "3"], show_choices=False)
+        choice = Prompt.ask("Select", choices=["0", "1", "2", "3", "4"], show_choices=False)
         if choice == "0":
             return
         elif choice == "1":
@@ -106,6 +140,8 @@ def _electronics_menu() -> None:
             _menu_resistor()
         elif choice == "3":
             _menu_timer555()
+        elif choice == "4":
+            _menu_resistor_bom()
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +327,14 @@ def _menu_kinematics() -> None:
         console.print(f"  a  = {result.values['a']:g} m/s²")
         console.print(f"  t  = {result.values['t']:g} s")
         console.print(f"  d  = {result.values['d']:g} m")
+        if Prompt.ask("\nShow step-by-step derivation?", choices=["y", "n"], default="n") == "y":
+            console.print()
+            for line in result.steps:
+                console.print(f"  {line}")
+        if Prompt.ask("Save a position/velocity vs. time plot?", choices=["y", "n"], default="n") == "y":
+            path = Prompt.ask("Save as", default="kinematics_plot.png")
+            saved = plotting.plot_kinematics(result.values["v0"], result.values["a"], result.values["t"], path)
+            console.print(f"[dim]Saved to {saved}[/dim]")
     except ValidationError as e:
         console.print(f"[red]{e}[/red]")
     _pause()

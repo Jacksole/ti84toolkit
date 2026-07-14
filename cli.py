@@ -29,7 +29,7 @@ from rich.table import Table
 from core import badges, config, history
 from core.menu import main_menu
 from core.validation import ValidationError
-from modules import electronics, logic, math_tools, physics, statistics_tools, units
+from modules import circuits, electronics, logic, math_tools, physics, plotting, resistor_bom, statistics_tools, units
 
 console = Console()
 
@@ -108,6 +108,11 @@ def _fail(e: ValidationError) -> None:
     raise typer.Exit(code=1)
 
 
+def _default_output_path(prefix: str) -> str:
+    import time
+    return f"{prefix}_{int(time.time())}.png"
+
+
 # ---------------------------------------------------------------------------
 # electronics ohms-law
 # ---------------------------------------------------------------------------
@@ -118,6 +123,7 @@ def ohms_law_cmd(
     voltage: Optional[float] = typer.Option(None, "--voltage", "-v", help="Voltage in volts"),
     current: Optional[float] = typer.Option(None, "--current", "-i", help="Current in amps"),
     resistance: Optional[float] = typer.Option(None, "--resistance", "-r", help="Resistance in ohms"),
+    steps: bool = typer.Option(False, "--steps", help="Show the step-by-step derivation"),
 ) -> None:
     """Solve Ohm's Law given exactly two of voltage, current, resistance."""
     try:
@@ -129,6 +135,8 @@ def ohms_law_cmd(
         "solved_for": result.solved_for, "voltage": result.voltage,
         "current": result.current, "resistance": result.resistance, "power": result.power,
     }
+    if steps:
+        data["steps"] = result.steps
 
     def render():
         console.print(f"[green]Solved for {result.solved_for}[/green]")
@@ -136,6 +144,10 @@ def ohms_law_cmd(
         console.print(f"  I = {result.current:g} A")
         console.print(f"  R = {result.resistance:g} \u03a9")
         console.print(f"  P = {result.power:g} W")
+        if steps:
+            console.print("\n[bold]Steps:[/bold]")
+            for line in result.steps:
+                console.print(f"  {line}")
 
     emit(data, render)
     log_calculation("electronics", "ohms-law", {"voltage": voltage, "current": current, "resistance": resistance}, f"V={result.voltage:g},I={result.current:g},R={result.resistance:g}")
@@ -149,6 +161,8 @@ def ohms_law_cmd(
 @electronics_app.command("resistor")
 def resistor_cmd(
     bands: list[str] = typer.Argument(..., help="Color bands, e.g. orange orange red gold"),
+    diagram: bool = typer.Option(False, "--diagram", help="Save a color-band diagram image"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Path for the diagram image (with --diagram)"),
 ) -> None:
     """Decode a 4-band or 5-band resistor color code."""
     try:
@@ -158,9 +172,21 @@ def resistor_cmd(
 
     data = {"ohms": result.ohms, "tolerance": result.tolerance, "display": result.display}
 
+    diagram_path = None
+    if diagram:
+        try:
+            diagram_path = circuits.draw_resistor_diagram(
+                bands, result.display, result.tolerance, output or _default_output_path("resistor_diagram")
+            )
+            data["diagram_path"] = diagram_path
+        except ValidationError as e:
+            _fail(e)
+
     def render():
         console.print(f"[green]Resistance:[/green] {result.display}")
         console.print(f"[green]Tolerance:[/green] {result.tolerance}")
+        if diagram_path:
+            console.print(f"[dim]Diagram saved to {diagram_path}[/dim]")
 
     emit(data, render)
     log_calculation("electronics", "resistor", {"bands": bands}, f"{result.display} {result.tolerance}")
@@ -176,6 +202,9 @@ def timer555_cmd(
     r1: float = typer.Option(..., "--r1", help="R1 in ohms"),
     r2: float = typer.Option(..., "--r2", help="R2 in ohms"),
     c: float = typer.Option(..., "--c", help="Capacitance in farads (e.g. 0.000001 for 1uF)"),
+    plot: bool = typer.Option(False, "--plot", help="Save a waveform plot of the output square wave"),
+    diagram: bool = typer.Option(False, "--diagram", help="Save a schematic of the astable circuit"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Path for the image (only valid with a single --plot/--diagram)"),
 ) -> None:
     """Compute frequency and duty cycle for a 555 timer in astable mode."""
     try:
@@ -188,15 +217,66 @@ def timer555_cmd(
         "duty_cycle_pct": result.duty_cycle_pct, "time_high_s": result.time_high_s, "time_low_s": result.time_low_s,
     }
 
+    plot_path = diagram_path = None
+    try:
+        if plot:
+            single = output if (output and not diagram) else _default_output_path("timer555_waveform")
+            plot_path = plotting.plot_555_waveform(result.frequency_hz, result.duty_cycle_pct, single)
+            data["plot_path"] = plot_path
+        if diagram:
+            single = output if (output and not plot) else _default_output_path("timer555_circuit")
+            diagram_path = circuits.draw_555_astable_circuit(r1, r2, c, single)
+            data["diagram_path"] = diagram_path
+    except ValidationError as e:
+        _fail(e)
+
     def render():
         console.print(f"[green]Frequency:[/green] {result.frequency_hz:.2f} Hz")
         console.print(f"[green]Period:[/green] {result.period_s * 1000:.4f} ms")
         console.print(f"[green]Duty Cycle:[/green] {result.duty_cycle_pct:.2f}%")
         console.print(f"[green]Time High:[/green] {result.time_high_s * 1000:.4f} ms")
         console.print(f"[green]Time Low:[/green] {result.time_low_s * 1000:.4f} ms")
+        if plot_path:
+            console.print(f"[dim]Waveform plot saved to {plot_path}[/dim]")
+        if diagram_path:
+            console.print(f"[dim]Circuit diagram saved to {diagram_path}[/dim]")
 
     emit(data, render)
     log_calculation("electronics", "timer555", {"r1": r1, "r2": r2, "c": c}, f"{result.frequency_hz:.2f} Hz")
+
+
+# ---------------------------------------------------------------------------
+# electronics bom (resistor combination finder)
+# ---------------------------------------------------------------------------
+
+
+@electronics_app.command("bom")
+def bom_cmd(
+    target: float = typer.Argument(..., help="Target resistance in ohms"),
+    series: str = typer.Option("E24", "--series", help="Standard series: E12 or E24"),
+    top: int = typer.Option(3, "--top", help="Number of options to show"),
+) -> None:
+    """Find the closest standard single resistor, series pair, and parallel pair to a target value."""
+    try:
+        options = resistor_bom.find_resistor_combo(target, series, top)
+    except ValidationError as e:
+        _fail(e)
+
+    data = {
+        "target_ohms": target, "series": series,
+        "options": [
+            {"kind": o.kind, "values": o.values, "achieved_ohms": o.achieved_ohms, "error_pct": o.error_pct}
+            for o in options
+        ],
+    }
+
+    def render():
+        console.print(f"[green]Target:[/green] {target:g} \u03a9  ([dim]{series} series[/dim])")
+        for o in options:
+            console.print(f"  {resistor_bom.format_option(o)}")
+
+    emit(data, render)
+    log_calculation("electronics", "bom", {"target": target, "series": series}, resistor_bom.format_option(options[0]) if options else "no options")
 
 
 def _render_truth_table(result, title: str) -> None:
@@ -370,6 +450,9 @@ def kinematics_cmd(
     a: Optional[float] = typer.Option(None, "--a", help="Acceleration (m/s^2)"),
     t: Optional[float] = typer.Option(None, "--t", help="Time (s)"),
     d: Optional[float] = typer.Option(None, "--d", help="Displacement (m)"),
+    steps: bool = typer.Option(False, "--steps", help="Show the step-by-step derivation"),
+    plot: bool = typer.Option(False, "--plot", help="Save a position/velocity vs. time chart"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Path for the plot image (with --plot)"),
 ) -> None:
     """Solve constant-acceleration kinematics given exactly 3 of v0, v, a, t, d."""
     try:
@@ -378,6 +461,19 @@ def kinematics_cmd(
         _fail(e)
 
     data = {"solved_for": result.solved_for, **result.values}
+    if steps:
+        data["steps"] = result.steps
+
+    plot_path = None
+    if plot:
+        try:
+            plot_path = plotting.plot_kinematics(
+                result.values["v0"], result.values["a"], result.values["t"],
+                output or _default_output_path("kinematics_plot"),
+            )
+            data["plot_path"] = plot_path
+        except ValidationError as e:
+            _fail(e)
 
     def render():
         console.print(f"[green]Solved for {' and '.join(result.solved_for)}:[/green]")
@@ -386,6 +482,12 @@ def kinematics_cmd(
         console.print(f"  a  = {result.values['a']:g} m/s\u00b2")
         console.print(f"  t  = {result.values['t']:g} s")
         console.print(f"  d  = {result.values['d']:g} m")
+        if steps:
+            console.print("\n[bold]Steps:[/bold]")
+            for line in result.steps:
+                console.print(f"  {line}")
+        if plot_path:
+            console.print(f"[dim]Plot saved to {plot_path}[/dim]")
 
     emit(data, render)
     log_calculation("physics", "kinematics", {"v0": v0, "v": v, "a": a, "t": t, "d": d}, f"solved {result.solved_for}")
