@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from core.validation import ValidationError, prompt_float
-from modules import circuits, electronics, logic, math_tools, orbital, physics, plotting, resistor_bom, statistics_tools, units
+from modules import calculus, circuits, electronics, finance, geometry, linear_algebra, logic, math_tools, orbital, physics, plotting, probability, resistor_bom, sequences, statistics_tools, units
 
 console = Console()
 
@@ -644,6 +644,353 @@ def _orbital_menu() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Calculus submenu
+# ---------------------------------------------------------------------------
+
+
+def _menu_calculus() -> None:
+    while True:
+        _header("Calculus")
+        console.print("1. Derivative")
+        console.print("2. Integral")
+        console.print("3. Limit")
+        console.print("4. Taylor Series")
+        console.print("0. Back\n")
+
+        choice = Prompt.ask("Select", choices=["0", "1", "2", "3", "4"], show_choices=False)
+        if choice == "0":
+            return
+
+        expr = Prompt.ask('Expression (e.g. "x**3 + 2*x")')
+        var = Prompt.ask("Variable", default="x")
+
+        try:
+            if choice == "1":
+                order = int(prompt_float("Order (blank for 1)", allow_blank=True) or 1)
+                result = calculus.derivative(expr, var, order)
+                console.print(f"\n[green]Result:[/green] {result.result}")
+            elif choice == "2":
+                definite = Prompt.ask("Definite integral?", choices=["y", "n"], default="n") == "y"
+                lower = prompt_float("Lower bound") if definite else None
+                upper = prompt_float("Upper bound") if definite else None
+                result = calculus.integral(expr, var, lower, upper)
+                console.print(f"\n[green]Result:[/green] {result.result}")
+            elif choice == "3":
+                point = Prompt.ask("Point (number, or 'oo'/'-oo' for infinity)")
+                direction = Prompt.ask("Direction", choices=["both", "left", "right"], default="both")
+                result = calculus.limit(expr, var, point, direction)
+                console.print(f"\n[green]Result:[/green] {result.result}")
+            else:
+                point = prompt_float("Expansion point (blank for 0)", allow_blank=True) or 0
+                order = int(prompt_float("Order (blank for 5)", allow_blank=True) or 5)
+                result = calculus.taylor_series(expr, var, point, order)
+                console.print(f"\n[green]Result:[/green] {result.result}")
+        except ValidationError as e:
+            console.print(f"[red]{e}[/red]")
+        _pause()
+
+
+# ---------------------------------------------------------------------------
+# Geometry submenu
+# ---------------------------------------------------------------------------
+
+
+def _render_shape_menu(result) -> None:
+    console.print(f"\n[green]{result.shape.capitalize()}:[/green]")
+    for key, val in result.measurements.items():
+        console.print(f"  {key.replace('_', ' ')}: {val:g}")
+
+
+def _menu_geometry() -> None:
+    while True:
+        _header("Geometry")
+        console.print("1. Circle")
+        console.print("2. Rectangle")
+        console.print("3. Triangle (base & height)")
+        console.print("4. Triangle (3 sides, Heron's formula)")
+        console.print("5. Pythagorean theorem")
+        console.print("6. Distance between two points")
+        console.print("7. Sphere")
+        console.print("8. Cylinder")
+        console.print("9. Cone")
+        console.print("10. Box")
+        console.print("0. Back\n")
+
+        choice = Prompt.ask("Select", choices=[str(i) for i in range(11)], show_choices=False)
+        if choice == "0":
+            return
+
+        try:
+            if choice == "1":
+                _render_shape_menu(geometry.circle(prompt_float("Radius")))
+            elif choice == "2":
+                _render_shape_menu(geometry.rectangle(prompt_float("Length"), prompt_float("Width")))
+            elif choice == "3":
+                _render_shape_menu(geometry.triangle_base_height(prompt_float("Base"), prompt_float("Height")))
+            elif choice == "4":
+                _render_shape_menu(geometry.triangle_sides(prompt_float("Side a"), prompt_float("Side b"), prompt_float("Side c")))
+            elif choice == "5":
+                if Prompt.ask("Solve for", choices=["hypotenuse", "leg"], default="hypotenuse") == "hypotenuse":
+                    result = geometry.pythagorean_hypotenuse(prompt_float("Leg a"), prompt_float("Leg b"))
+                    console.print(f"\n[green]Hypotenuse:[/green] {result:g}")
+                else:
+                    result = geometry.pythagorean_leg(prompt_float("Hypotenuse"), prompt_float("Other leg"))
+                    console.print(f"\n[green]Leg:[/green] {result:g}")
+            elif choice == "6":
+                is_3d = Prompt.ask("3D?", choices=["y", "n"], default="n") == "y"
+                x1, y1 = prompt_float("x1"), prompt_float("y1")
+                x2, y2 = prompt_float("x2"), prompt_float("y2")
+                if is_3d:
+                    z1, z2 = prompt_float("z1"), prompt_float("z2")
+                    result = geometry.distance_3d(x1, y1, z1, x2, y2, z2)
+                else:
+                    result = geometry.distance_2d(x1, y1, x2, y2)
+                console.print(f"\n[green]Distance:[/green] {result:g}")
+            elif choice == "7":
+                _render_shape_menu(geometry.sphere(prompt_float("Radius")))
+            elif choice == "8":
+                _render_shape_menu(geometry.cylinder(prompt_float("Radius"), prompt_float("Height")))
+            elif choice == "9":
+                _render_shape_menu(geometry.cone(prompt_float("Radius"), prompt_float("Height")))
+            else:
+                _render_shape_menu(geometry.box(prompt_float("Length"), prompt_float("Width"), prompt_float("Height")))
+        except ValidationError as e:
+            console.print(f"[red]{e}[/red]")
+        _pause()
+
+
+# ---------------------------------------------------------------------------
+# Linear Algebra submenu
+# ---------------------------------------------------------------------------
+
+
+def _prompt_vector(label: str) -> list[float]:
+    raw = Prompt.ask(f"{label} (comma-separated, e.g. 1,2,3)")
+    return [float(x) for x in raw.split(",")]
+
+
+def _prompt_matrix(label: str) -> list[list[float]]:
+    raw = Prompt.ask(f"{label} (rows separated by ';', e.g. 1,2;3,4)")
+    return [[float(x) for x in row.split(",")] for row in raw.split(";")]
+
+
+def _render_vector(v) -> None:
+    console.print(f"[green]Result:[/green] ({', '.join(f'{x:g}' for x in v)})")
+
+
+def _render_matrix_menu(rows: list[list[float]]) -> None:
+    for row in rows:
+        console.print("  " + "  ".join(f"{x:g}" for x in row))
+
+
+def _menu_linalg() -> None:
+    while True:
+        _header("Linear Algebra")
+        console.print("1. Vector Dot Product")
+        console.print("2. Vector Cross Product")
+        console.print("3. Vector Magnitude")
+        console.print("4. Vector Normalize")
+        console.print("5. Vector Angle Between")
+        console.print("6. Matrix Add")
+        console.print("7. Matrix Multiply")
+        console.print("8. Matrix Transpose")
+        console.print("9. Matrix Determinant")
+        console.print("10. Matrix Inverse")
+        console.print("0. Back\n")
+
+        choice = Prompt.ask("Select", choices=[str(i) for i in range(11)], show_choices=False)
+        if choice == "0":
+            return
+
+        try:
+            if choice == "1":
+                console.print(f"\n[green]Result:[/green] {linear_algebra.vector_dot(_prompt_vector('v1'), _prompt_vector('v2')):g}")
+            elif choice == "2":
+                console.print()
+                _render_vector(linear_algebra.vector_cross(_prompt_vector("v1"), _prompt_vector("v2")))
+            elif choice == "3":
+                console.print(f"\n[green]Result:[/green] {linear_algebra.vector_magnitude(_prompt_vector('v')):g}")
+            elif choice == "4":
+                console.print()
+                _render_vector(linear_algebra.vector_normalize(_prompt_vector("v")))
+            elif choice == "5":
+                angle = linear_algebra.vector_angle_between(_prompt_vector("v1"), _prompt_vector("v2"))
+                console.print(f"\n[green]Angle:[/green] {angle * 180 / 3.141592653589793:g}\u00b0 ({angle:g} rad)")
+            elif choice == "6":
+                console.print()
+                _render_matrix_menu(linear_algebra.matrix_add(_prompt_matrix("M1"), _prompt_matrix("M2")).rows)
+            elif choice == "7":
+                console.print()
+                _render_matrix_menu(linear_algebra.matrix_multiply(_prompt_matrix("M1"), _prompt_matrix("M2")).rows)
+            elif choice == "8":
+                console.print()
+                _render_matrix_menu(linear_algebra.matrix_transpose(_prompt_matrix("M")).rows)
+            elif choice == "9":
+                console.print(f"\n[green]Determinant:[/green] {linear_algebra.matrix_determinant(_prompt_matrix('M')):g}")
+            else:
+                console.print()
+                _render_matrix_menu(linear_algebra.matrix_inverse(_prompt_matrix("M")).rows)
+        except ValidationError as e:
+            console.print(f"[red]{e}[/red]")
+        _pause()
+
+
+# ---------------------------------------------------------------------------
+# Sequences submenu
+# ---------------------------------------------------------------------------
+
+
+def _menu_sequences() -> None:
+    while True:
+        _header("Sequences and Series")
+        console.print("1. Arithmetic nth Term")
+        console.print("2. Arithmetic Sum")
+        console.print("3. Geometric nth Term")
+        console.print("4. Geometric Sum")
+        console.print("5. Geometric Sum (infinite)")
+        console.print("0. Back\n")
+
+        choice = Prompt.ask("Select", choices=["0", "1", "2", "3", "4", "5"], show_choices=False)
+        if choice == "0":
+            return
+
+        try:
+            if choice in ("1", "2"):
+                a1 = prompt_float("First term (a1)")
+                d = prompt_float("Common difference (d)")
+                n = int(prompt_float("n"))
+                if choice == "1":
+                    console.print(f"\n[green]a_{n} =[/green] {sequences.arithmetic_nth_term(a1, d, n):g}")
+                else:
+                    console.print(f"\n[green]S_{n} =[/green] {sequences.arithmetic_sum(a1, d, n):g}")
+            elif choice in ("3", "4"):
+                a1 = prompt_float("First term (a1)")
+                r = prompt_float("Common ratio (r)")
+                n = int(prompt_float("n"))
+                if choice == "3":
+                    console.print(f"\n[green]a_{n} =[/green] {sequences.geometric_nth_term(a1, r, n):g}")
+                else:
+                    console.print(f"\n[green]S_{n} =[/green] {sequences.geometric_sum(a1, r, n):g}")
+            else:
+                a1 = prompt_float("First term (a1)")
+                r = prompt_float("Common ratio (r, must satisfy |r| < 1)")
+                result = sequences.geometric_sum_infinite(a1, r)
+                console.print(f"\n[green]S_\u221e =[/green] {result.sum:g}")
+        except ValidationError as e:
+            console.print(f"[red]{e}[/red]")
+        _pause()
+
+
+# ---------------------------------------------------------------------------
+# Probability submenu
+# ---------------------------------------------------------------------------
+
+
+def _menu_probability() -> None:
+    while True:
+        _header("Probability Distributions")
+        console.print("1. Binomial PMF")
+        console.print("2. Binomial CDF")
+        console.print("3. Binomial Stats (mean/variance/stdev)")
+        console.print("4. Normal PDF")
+        console.print("5. Normal CDF")
+        console.print("6. Normal CDF Range")
+        console.print("7. Inverse Normal CDF")
+        console.print("8. Z-Score")
+        console.print("0. Back\n")
+
+        choice = Prompt.ask("Select", choices=[str(i) for i in range(9)], show_choices=False)
+        if choice == "0":
+            return
+
+        try:
+            if choice in ("1", "2", "3"):
+                n = int(prompt_float("n"))
+                if choice == "3":
+                    p = prompt_float("p")
+                    result = probability.binomial_stats(n, p)
+                    console.print(f"\n[green]Mean:[/green] {result.mean:g}  [green]Variance:[/green] {result.variance:g}  [green]Stdev:[/green] {result.stdev:g}")
+                else:
+                    k = int(prompt_float("k"))
+                    p = prompt_float("p")
+                    if choice == "1":
+                        console.print(f"\n[green]P(X = {k}):[/green] {probability.binomial_pmf(n, k, p):g}")
+                    else:
+                        console.print(f"\n[green]P(X \u2264 {k}):[/green] {probability.binomial_cdf(n, k, p):g}")
+            else:
+                mean = prompt_float("Mean", allow_blank=True) or 0
+                stdev = prompt_float("Standard deviation", allow_blank=True) or 1
+                if choice == "4":
+                    x = prompt_float("x")
+                    console.print(f"\n[green]f(x):[/green] {probability.normal_pdf(x, mean, stdev):g}")
+                elif choice == "5":
+                    x = prompt_float("x")
+                    console.print(f"\n[green]P(X \u2264 x):[/green] {probability.normal_cdf(x, mean, stdev):g}")
+                elif choice == "6":
+                    low = prompt_float("Low")
+                    high = prompt_float("High")
+                    console.print(f"\n[green]P(low \u2264 X \u2264 high):[/green] {probability.normal_cdf_range(low, high, mean, stdev):g}")
+                elif choice == "7":
+                    p = prompt_float("p (0 to 1)")
+                    console.print(f"\n[green]x:[/green] {probability.inverse_normal_cdf(p, mean, stdev):g}")
+                else:
+                    x = prompt_float("x")
+                    console.print(f"\n[green]z:[/green] {probability.z_score(x, mean, stdev):g}")
+        except ValidationError as e:
+            console.print(f"[red]{e}[/red]")
+        _pause()
+
+
+# ---------------------------------------------------------------------------
+# Finance submenu
+# ---------------------------------------------------------------------------
+
+
+def _menu_finance() -> None:
+    while True:
+        _header("Finance")
+        console.print("1. TVM Solver (loans, mortgages, annuities)")
+        console.print("2. Compound Interest (lump sum, no payments)")
+        console.print("0. Back\n")
+
+        choice = Prompt.ask("Select", choices=["0", "1", "2"], show_choices=False)
+        if choice == "0":
+            return
+
+        try:
+            if choice == "1":
+                console.print("Enter exactly 4 of the 5 values below. Leave the unknown one blank.\n")
+                n = prompt_float("n (number of periods)", allow_blank=True)
+                rate = prompt_float("Annual rate, percent", allow_blank=True)
+                pv = prompt_float("Present value (negative if paid out)", allow_blank=True)
+                pmt = prompt_float("Payment per period (negative if paid out)", allow_blank=True)
+                fv = prompt_float("Future value (negative if paid out)", allow_blank=True)
+                ppy = int(prompt_float("Payments per year", allow_blank=True) or 12)
+                result = finance.solve_tvm(n, rate, pv, pmt, fv, ppy)
+                console.print(f"\n[green]Solved for {result.solved_for}:[/green]")
+                console.print(f"  n = {result.n:g}")
+                console.print(f"  rate = {result.rate_percent:g}%")
+                console.print(f"  pv = {result.pv:g}")
+                console.print(f"  pmt = {result.pmt:g}")
+                console.print(f"  fv = {result.fv:g}")
+                if Prompt.ask("\nShow step-by-step derivation?", choices=["y", "n"], default="n") == "y":
+                    console.print()
+                    for line in result.steps:
+                        console.print(f"  {line}")
+            else:
+                principal = prompt_float("Principal")
+                rate = prompt_float("Annual rate, percent")
+                compounds = int(prompt_float("Compounds per year", allow_blank=True) or 12)
+                years = prompt_float("Years")
+                result = finance.compound_interest(principal, rate, compounds, years)
+                console.print(f"\n[green]Future value:[/green] {result.future_value:g}")
+                console.print(f"[green]Interest earned:[/green] {result.interest_earned:g}")
+        except ValidationError as e:
+            console.print(f"[red]{e}[/red]")
+        _pause()
+
+
+# ---------------------------------------------------------------------------
 # Main menu
 # ---------------------------------------------------------------------------
 
@@ -658,9 +1005,15 @@ def main_menu() -> None:
         console.print("5. Statistics")
         console.print("6. Unit Conversion")
         console.print("7. Orbital Mechanics")
+        console.print("8. Calculus")
+        console.print("9. Geometry")
+        console.print("10. Linear Algebra")
+        console.print("11. Sequences and Series")
+        console.print("12. Probability Distributions")
+        console.print("13. Finance")
         console.print("0. Exit\n")
 
-        choice = Prompt.ask("Select", choices=["0", "1", "2", "3", "4", "5", "6", "7"], show_choices=False)
+        choice = Prompt.ask("Select", choices=[str(i) for i in range(14)], show_choices=False)
         if choice == "0":
             console.print("\n[cyan]Goodbye.[/cyan]")
             return
@@ -678,3 +1031,15 @@ def main_menu() -> None:
             _menu_units()
         elif choice == "7":
             _orbital_menu()
+        elif choice == "8":
+            _menu_calculus()
+        elif choice == "9":
+            _menu_geometry()
+        elif choice == "10":
+            _menu_linalg()
+        elif choice == "11":
+            _menu_sequences()
+        elif choice == "12":
+            _menu_probability()
+        elif choice == "13":
+            _menu_finance()
