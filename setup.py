@@ -10,6 +10,9 @@ setup(
         "typer>=0.12.0",
         "rich>=13.7.0",
         "sympy>=1.13.0",
+        "matplotlib>=3.8.0",
+        "numpy>=1.26.0",
+        "schemdraw>=0.19",
     ],
     entry_points={
         "console_scripts": [
