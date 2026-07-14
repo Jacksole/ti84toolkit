@@ -37,6 +37,12 @@ class TestOhmsLaw:
         with pytest.raises(ValidationError):
             electronics.ohms_law(voltage=5, current=0)
 
+    def test_steps_are_populated(self):
+        result = electronics.ohms_law(current=2, resistance=100)
+        assert len(result.steps) >= 3
+        assert any("Ohm's Law" in s for s in result.steps)
+        assert any("200" in s for s in result.steps)
+
 
 class TestResistorColorCode:
     def test_4_band_orange_orange_red_gold(self):

@@ -47,6 +47,12 @@ class TestKinematicsSolve:
         result = physics.kinematics_solve(v0=10, v=0, d=10)
         assert result.values["t"] >= 0
 
+    def test_steps_are_populated(self):
+        result = physics.kinematics_solve(v0=0, a=2, t=5)
+        assert len(result.steps) >= 5
+        assert any("Known" in s for s in result.steps)
+        assert any("v = v0 + a*t" in s for s in result.steps)
+
 
 class TestEnergyAndPower:
     def test_kinetic_energy(self):

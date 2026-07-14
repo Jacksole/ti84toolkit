@@ -24,6 +24,7 @@ class OhmsLawResult:
     resistance: float
     power: float
     solved_for: str
+    steps: list[str]
 
 
 def ohms_law(voltage: float | None = None, current: float | None = None, resistance: float | None = None) -> OhmsLawResult:
@@ -32,23 +33,40 @@ def ohms_law(voltage: float | None = None, current: float | None = None, resista
         {"voltage": voltage, "current": current, "resistance": resistance}, 2, "Ohm's Law"
     )
 
+    steps: list[str] = []
+
     if voltage is None:
         if current == 0:
             raise ValidationError("Current cannot be zero when solving for voltage.")
+        steps.append("Known: I (current), R (resistance). Unknown: V (voltage).")
+        steps.append("Ohm's Law: V = I x R")
+        steps.append(f"V = {current:g} x {resistance:g}")
         voltage = current * resistance
+        steps.append(f"V = {voltage:g} V")
         solved_for = "voltage"
     elif current is None:
         if resistance == 0:
             raise ValidationError("Resistance cannot be zero when solving for current.")
+        steps.append("Known: V (voltage), R (resistance). Unknown: I (current).")
+        steps.append("Ohm's Law: V = I x R  ->  I = V / R")
+        steps.append(f"I = {voltage:g} / {resistance:g}")
         current = voltage / resistance
+        steps.append(f"I = {current:g} A")
         solved_for = "current"
     else:
         if current == 0:
             raise ValidationError("Current cannot be zero when solving for resistance.")
+        steps.append("Known: V (voltage), I (current). Unknown: R (resistance).")
+        steps.append("Ohm's Law: V = I x R  ->  R = V / I")
+        steps.append(f"R = {voltage:g} / {current:g}")
         resistance = voltage / current
+        steps.append(f"R = {resistance:g} \u03a9")
         solved_for = "resistance"
 
-    return OhmsLawResult(voltage, current, resistance, voltage * current, solved_for)
+    power = voltage * current
+    steps.append(f"Power check: P = V x I = {voltage:g} x {current:g} = {power:g} W")
+
+    return OhmsLawResult(voltage, current, resistance, power, solved_for, steps)
 
 
 # ---------------------------------------------------------------------------

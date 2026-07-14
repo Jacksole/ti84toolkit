@@ -36,6 +36,7 @@ _SYMBOLS = {"v0": _V0, "v": _V, "a": _A, "t": _T, "d": _D}
 class KinematicsResult:
     values: dict[str, float]  # all five variables, resolved
     solved_for: list[str]     # which two were computed
+    steps: list[str]
 
 
 def kinematics_solve(
@@ -50,10 +51,20 @@ def kinematics_solve(
     require_exactly_n_known(known, 3, "Kinematics")
 
     unknown_names = [name for name, val in known.items() if val is None]
+    known_str = ", ".join(f"{n} = {val:g}" for n, val in known.items() if val is not None)
 
     eq1 = _EQ_VELOCITY.subs({_SYMBOLS[n]: val for n, val in known.items() if val is not None})
     eq2 = _EQ_POSITION.subs({_SYMBOLS[n]: val for n, val in known.items() if val is not None})
     unknown_symbols = [_SYMBOLS[n] for n in unknown_names]
+
+    steps: list[str] = [
+        f"Known: {known_str}. Unknown: {', '.join(unknown_names)}.",
+        "Equation 1 (velocity):  v = v0 + a*t",
+        "Equation 2 (position):  d = v0*t + (1/2)*a*t^2",
+        f"Substitute knowns into Eq 1:  {eq1}",
+        f"Substitute knowns into Eq 2:  {eq2}",
+        f"Solve the two equations simultaneously for {' and '.join(unknown_names)}.",
+    ]
 
     try:
         solutions = sympy.solve([eq1, eq2], unknown_symbols, dict=True)
@@ -80,12 +91,16 @@ def kinematics_solve(
             "No physically valid solution found (results were complex or implied negative time)."
         )
 
+    if len(solutions) > 1:
+        steps.append(f"Note: {len(solutions)} mathematical solutions exist; the physically valid one (real, non-negative time) was selected.")
+
     resolved = dict(known)
     for sym, expr in chosen.items():
         name = next(n for n, s in _SYMBOLS.items() if s == sym)
         resolved[name] = float(expr)
+        steps.append(f"{name} = {resolved[name]:g}")
 
-    return KinematicsResult(resolved, unknown_names)
+    return KinematicsResult(resolved, unknown_names, steps)
 
 
 # ---------------------------------------------------------------------------
