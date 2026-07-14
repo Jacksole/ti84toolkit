@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from core.validation import ValidationError, prompt_float
-from modules import circuits, electronics, logic, math_tools, physics, plotting, resistor_bom, statistics_tools, units
+from modules import circuits, electronics, logic, math_tools, orbital, physics, plotting, resistor_bom, statistics_tools, units
 
 console = Console()
 
@@ -526,6 +526,124 @@ def _menu_units() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Orbital Mechanics submenu
+# ---------------------------------------------------------------------------
+
+
+def _resolve_mu_menu() -> float:
+    console.print(f"[dim]Known bodies: {', '.join(orbital.BODIES)}[/dim]")
+    choice = Prompt.ask("Use a known body, or enter mu manually?", choices=["body", "mu"], default="body")
+    if choice == "body":
+        return orbital.body_mu(Prompt.ask("Body"))
+    return prompt_float("Gravitational parameter mu (m^3/s^2)")
+
+
+def _menu_orbital_period() -> None:
+    _header("Orbital Period (Kepler's Third Law)")
+    a = prompt_float("Semi-major axis (m)")
+    try:
+        mu = _resolve_mu_menu()
+        period = orbital.orbital_period(a, mu)
+        console.print(f"\n[green]Period:[/green] {period:g} s  ({period / 60:.2f} min, {period / 3600:.2f} hr, {period / 86400:.3f} days)")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _menu_orbital_velocity() -> None:
+    _header("Orbital Velocity")
+    console.print("1. Circular\n2. Escape\n3. Vis-viva (at radius r, in orbit of semi-major axis a)\n")
+    choice = Prompt.ask("Select", choices=["1", "2", "3"], show_choices=False)
+
+    try:
+        r = prompt_float("Radius r (m)")
+        mu = _resolve_mu_menu()
+        if choice == "1":
+            v = orbital.circular_velocity(r, mu)
+            label = "Circular"
+        elif choice == "2":
+            v = orbital.escape_velocity(r, mu)
+            label = "Escape"
+        else:
+            a = prompt_float("Semi-major axis a (m)")
+            v = orbital.vis_viva_velocity(r, a, mu)
+            label = "Vis-viva"
+        console.print(f"\n[green]{label} velocity:[/green] {v:g} m/s ({v / 1000:.3f} km/s)")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _menu_kepler_equation() -> None:
+    _header("Kepler's Equation Solver")
+    console.print("Solve M = E - e*sin(E) for the eccentric anomaly, via Newton-Raphson.\n")
+
+    m = prompt_float("Mean anomaly M (radians)")
+    e = prompt_float("Eccentricity e (0 to <1)")
+
+    try:
+        result = orbital.solve_kepler_equation(m, e)
+        console.print(f"\n[green]Eccentric anomaly (E):[/green] {result.eccentric_anomaly_rad:g} rad")
+        console.print(f"[green]True anomaly (\u03bd):[/green] {result.true_anomaly_rad:g} rad")
+        console.print(f"[dim]Converged in {result.iterations} iterations[/dim]")
+        if Prompt.ask("\nShow step-by-step derivation?", choices=["y", "n"], default="n") == "y":
+            console.print()
+            for line in result.steps:
+                console.print(f"  {line}")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _menu_hohmann() -> None:
+    _header("Hohmann Transfer")
+
+    r1 = prompt_float("Departure orbit radius r1 (m)")
+    r2 = prompt_float("Arrival orbit radius r2 (m)")
+
+    try:
+        mu = _resolve_mu_menu()
+        result = orbital.hohmann_transfer(r1, r2, mu)
+        console.print(f"\n[green]Burn 1 (departure):[/green] {result.delta_v1_mps:g} m/s")
+        console.print(f"[green]Burn 2 (arrival):[/green] {result.delta_v2_mps:g} m/s")
+        console.print(f"[green]Total delta-v:[/green] {result.total_delta_v_mps:g} m/s")
+        console.print(f"[green]Transfer time:[/green] {result.transfer_time_s:g} s ({result.transfer_time_s / 3600:.2f} hr)")
+        if Prompt.ask("\nShow step-by-step derivation?", choices=["y", "n"], default="n") == "y":
+            console.print()
+            for line in result.steps:
+                console.print(f"  {line}")
+        if Prompt.ask("Save a transfer orbit diagram?", choices=["y", "n"], default="n") == "y":
+            path = Prompt.ask("Save as", default="hohmann_transfer.png")
+            saved = plotting.plot_hohmann_transfer(r1, r2, path)
+            console.print(f"[dim]Saved to {saved}[/dim]")
+    except ValidationError as e:
+        console.print(f"[red]{e}[/red]")
+    _pause()
+
+
+def _orbital_menu() -> None:
+    while True:
+        _header("Orbital Mechanics")
+        console.print("1. Orbital Period (Kepler's Third Law)")
+        console.print("2. Orbital Velocity (circular / escape / vis-viva)")
+        console.print("3. Kepler's Equation Solver")
+        console.print("4. Hohmann Transfer")
+        console.print("0. Back\n")
+
+        choice = Prompt.ask("Select", choices=["0", "1", "2", "3", "4"], show_choices=False)
+        if choice == "0":
+            return
+        elif choice == "1":
+            _menu_orbital_period()
+        elif choice == "2":
+            _menu_orbital_velocity()
+        elif choice == "3":
+            _menu_kepler_equation()
+        elif choice == "4":
+            _menu_hohmann()
+
+
+# ---------------------------------------------------------------------------
 # Main menu
 # ---------------------------------------------------------------------------
 
@@ -539,9 +657,10 @@ def main_menu() -> None:
         console.print("4. Logic")
         console.print("5. Statistics")
         console.print("6. Unit Conversion")
+        console.print("7. Orbital Mechanics")
         console.print("0. Exit\n")
 
-        choice = Prompt.ask("Select", choices=["0", "1", "2", "3", "4", "5", "6"], show_choices=False)
+        choice = Prompt.ask("Select", choices=["0", "1", "2", "3", "4", "5", "6", "7"], show_choices=False)
         if choice == "0":
             console.print("\n[cyan]Goodbye.[/cyan]")
             return
@@ -557,3 +676,5 @@ def main_menu() -> None:
             _statistics_menu()
         elif choice == "6":
             _menu_units()
+        elif choice == "7":
+            _orbital_menu()

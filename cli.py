@@ -29,7 +29,7 @@ from rich.table import Table
 from core import badges, config, history
 from core.menu import main_menu
 from core.validation import ValidationError
-from modules import circuits, electronics, logic, math_tools, physics, plotting, resistor_bom, statistics_tools, units
+from modules import circuits, electronics, logic, math_tools, orbital, physics, plotting, resistor_bom, statistics_tools, units
 
 console = Console()
 
@@ -59,6 +59,9 @@ app.add_typer(units_app, name="units")
 
 history_app = typer.Typer(help="View or clear locally saved calculation history.")
 app.add_typer(history_app, name="history")
+
+orbital_app = typer.Typer(help="Orbital mechanics: Kepler's laws, vis-viva, Kepler's equation, Hohmann transfers.")
+app.add_typer(orbital_app, name="orbital")
 
 
 # ---------------------------------------------------------------------------
@@ -755,6 +758,153 @@ def history_clear_cmd(
 
     removed = history.clear_history()
     emit({"deleted": removed}, lambda: console.print(f"[green]Deleted {removed} history entries.[/green]"))
+
+
+# ---------------------------------------------------------------------------
+# orbital period / velocity / kepler-equation / hohmann
+# ---------------------------------------------------------------------------
+
+
+def _resolve_mu(mu: Optional[float], body: Optional[str]) -> float:
+    if mu is not None:
+        return mu
+    if body:
+        return orbital.body_mu(body)
+    raise ValidationError("Provide either --mu directly or --body (e.g. earth, moon, mars, sun, jupiter).")
+
+
+@orbital_app.command("period")
+def orbital_period_cmd(
+    semi_major_axis: float = typer.Option(..., "--a", help="Semi-major axis in meters"),
+    mu: Optional[float] = typer.Option(None, "--mu", help="Gravitational parameter (m^3/s^2)"),
+    body: Optional[str] = typer.Option(None, "--body", help=f"Central body: {', '.join(orbital.BODIES)}"),
+) -> None:
+    """Orbital period via Kepler's Third Law."""
+    try:
+        mu_val = _resolve_mu(mu, body)
+        period = orbital.orbital_period(semi_major_axis, mu_val)
+    except ValidationError as e:
+        _fail(e)
+
+    data = {"semi_major_axis_m": semi_major_axis, "mu": mu_val, "period_s": period}
+
+    def render():
+        console.print(f"[green]Period:[/green] {period:g} s  ({period / 60:.2f} min, {period / 3600:.2f} hr, {period / 86400:.3f} days)")
+
+    emit(data, render)
+    log_calculation("orbital", "period", {"a": semi_major_axis, "body": body}, f"{period:g} s")
+
+
+@orbital_app.command("velocity")
+def orbital_velocity_cmd(
+    r: float = typer.Option(..., "--r", help="Radius at which to evaluate velocity (m)"),
+    kind: str = typer.Option("circular", "--kind", help="circular, escape, or vis-viva"),
+    a: Optional[float] = typer.Option(None, "--a", help="Orbit semi-major axis in meters (required for vis-viva)"),
+    mu: Optional[float] = typer.Option(None, "--mu", help="Gravitational parameter (m^3/s^2)"),
+    body: Optional[str] = typer.Option(None, "--body", help=f"Central body: {', '.join(orbital.BODIES)}"),
+) -> None:
+    """Compute circular, escape, or vis-viva orbital velocity."""
+    kind = kind.strip().lower()
+    try:
+        mu_val = _resolve_mu(mu, body)
+        if kind == "circular":
+            v = orbital.circular_velocity(r, mu_val)
+        elif kind == "escape":
+            v = orbital.escape_velocity(r, mu_val)
+        elif kind == "vis-viva":
+            if a is None:
+                raise ValidationError("vis-viva requires --a (the orbit's semi-major axis).")
+            v = orbital.vis_viva_velocity(r, a, mu_val)
+        else:
+            raise ValidationError("kind must be one of: circular, escape, vis-viva.")
+    except ValidationError as e:
+        _fail(e)
+
+    data = {"kind": kind, "r_m": r, "velocity_mps": v}
+    emit(data, lambda: console.print(f"[green]{kind.capitalize()} velocity:[/green] {v:g} m/s ({v / 1000:.3f} km/s)"))
+    log_calculation("orbital", "velocity", {"kind": kind, "r": r, "body": body}, f"{v:g} m/s")
+
+
+@orbital_app.command("kepler-equation")
+def kepler_equation_cmd(
+    mean_anomaly: float = typer.Argument(..., help="Mean anomaly in radians"),
+    eccentricity: float = typer.Argument(..., help="Orbital eccentricity (0 <= e < 1)"),
+    steps: bool = typer.Option(False, "--steps", help="Show the Newton-Raphson iteration steps"),
+) -> None:
+    """Solve Kepler's equation (M = E - e*sin(E)) via Newton-Raphson."""
+    try:
+        result = orbital.solve_kepler_equation(mean_anomaly, eccentricity)
+    except ValidationError as e:
+        _fail(e)
+
+    data = {
+        "mean_anomaly_rad": result.mean_anomaly_rad, "eccentricity": result.eccentricity,
+        "eccentric_anomaly_rad": result.eccentric_anomaly_rad, "true_anomaly_rad": result.true_anomaly_rad,
+        "iterations": result.iterations,
+    }
+    if steps:
+        data["steps"] = result.steps
+
+    def render():
+        console.print(f"[green]Eccentric anomaly (E):[/green] {result.eccentric_anomaly_rad:g} rad")
+        console.print(f"[green]True anomaly (\u03bd):[/green] {result.true_anomaly_rad:g} rad")
+        console.print(f"[dim]Converged in {result.iterations} iterations[/dim]")
+        if steps:
+            console.print("\n[bold]Steps:[/bold]")
+            for line in result.steps:
+                console.print(f"  {line}")
+
+    emit(data, render)
+    log_calculation("orbital", "kepler-equation", {"M": mean_anomaly, "e": eccentricity}, f"E={result.eccentric_anomaly_rad:g}")
+
+
+@orbital_app.command("hohmann")
+def hohmann_cmd(
+    r1: float = typer.Option(..., "--r1", help="Departure orbit radius (m)"),
+    r2: float = typer.Option(..., "--r2", help="Arrival orbit radius (m)"),
+    mu: Optional[float] = typer.Option(None, "--mu", help="Gravitational parameter (m^3/s^2)"),
+    body: Optional[str] = typer.Option(None, "--body", help=f"Central body: {', '.join(orbital.BODIES)}"),
+    steps: bool = typer.Option(False, "--steps", help="Show the step-by-step derivation"),
+    plot: bool = typer.Option(False, "--plot", help="Save a diagram of the transfer orbit"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Path for the plot image (with --plot)"),
+) -> None:
+    """Compute the two burns, total delta-v, and transfer time for a Hohmann transfer."""
+    try:
+        mu_val = _resolve_mu(mu, body)
+        result = orbital.hohmann_transfer(r1, r2, mu_val)
+    except ValidationError as e:
+        _fail(e)
+
+    data = {
+        "r1_m": result.r1_m, "r2_m": result.r2_m, "delta_v1_mps": result.delta_v1_mps,
+        "delta_v2_mps": result.delta_v2_mps, "total_delta_v_mps": result.total_delta_v_mps,
+        "transfer_time_s": result.transfer_time_s,
+    }
+    if steps:
+        data["steps"] = result.steps
+
+    plot_path = None
+    if plot:
+        try:
+            plot_path = plotting.plot_hohmann_transfer(r1, r2, output or _default_output_path("hohmann_transfer"))
+            data["plot_path"] = plot_path
+        except ValidationError as e:
+            _fail(e)
+
+    def render():
+        console.print(f"[green]Burn 1 (departure):[/green] {result.delta_v1_mps:g} m/s")
+        console.print(f"[green]Burn 2 (arrival):[/green] {result.delta_v2_mps:g} m/s")
+        console.print(f"[green]Total delta-v:[/green] {result.total_delta_v_mps:g} m/s")
+        console.print(f"[green]Transfer time:[/green] {result.transfer_time_s:g} s ({result.transfer_time_s / 3600:.2f} hr)")
+        if steps:
+            console.print("\n[bold]Steps:[/bold]")
+            for line in result.steps:
+                console.print(f"  {line}")
+        if plot_path:
+            console.print(f"[dim]Transfer orbit diagram saved to {plot_path}[/dim]")
+
+    emit(data, render)
+    log_calculation("orbital", "hohmann", {"r1": r1, "r2": r2, "body": body}, f"dv={result.total_delta_v_mps:g} m/s")
 
 
 # ---------------------------------------------------------------------------
