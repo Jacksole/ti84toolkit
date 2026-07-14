@@ -29,7 +29,7 @@ from rich.table import Table
 from core import badges, config, history
 from core.menu import main_menu
 from core.validation import ValidationError
-from modules import circuits, electronics, logic, math_tools, orbital, physics, plotting, resistor_bom, statistics_tools, units
+from modules import calculus, circuits, electronics, finance, geometry, linear_algebra, logic, math_tools, orbital, physics, plotting, probability, resistor_bom, sequences, statistics_tools, units
 
 console = Console()
 
@@ -62,6 +62,24 @@ app.add_typer(history_app, name="history")
 
 orbital_app = typer.Typer(help="Orbital mechanics: Kepler's laws, vis-viva, Kepler's equation, Hohmann transfers.")
 app.add_typer(orbital_app, name="orbital")
+
+calculus_app = typer.Typer(help="Calculus: derivatives, integrals, limits, Taylor series.")
+app.add_typer(calculus_app, name="calculus")
+
+geometry_app = typer.Typer(help="Geometry: 2D/3D shapes, Pythagorean theorem, distance formula.")
+app.add_typer(geometry_app, name="geometry")
+
+linalg_app = typer.Typer(help="Linear algebra: vector and matrix operations.")
+app.add_typer(linalg_app, name="linalg")
+
+sequences_app = typer.Typer(help="Sequences and series: arithmetic and geometric.")
+app.add_typer(sequences_app, name="sequences")
+
+probability_app = typer.Typer(help="Probability distributions: binomial and normal.")
+app.add_typer(probability_app, name="probability")
+
+finance_app = typer.Typer(help="Finance: TVM solver, compound interest.")
+app.add_typer(finance_app, name="finance")
 
 
 # ---------------------------------------------------------------------------
@@ -905,6 +923,585 @@ def hohmann_cmd(
 
     emit(data, render)
     log_calculation("orbital", "hohmann", {"r1": r1, "r2": r2, "body": body}, f"dv={result.total_delta_v_mps:g} m/s")
+
+
+# ---------------------------------------------------------------------------
+# calculus
+# ---------------------------------------------------------------------------
+
+
+@calculus_app.command("derivative")
+def derivative_cmd(
+    expression: str = typer.Argument(..., help='Expression, e.g. "x**3 + 2*x"'),
+    var: str = typer.Option("x", "--var", help="Variable to differentiate with respect to"),
+    order: int = typer.Option(1, "--order", help="Derivative order"),
+) -> None:
+    """Compute the nth derivative of an expression."""
+    try:
+        result = calculus.derivative(expression, var, order)
+    except ValidationError as e:
+        _fail(e)
+    data = {"expression": expression, "var": var, "order": order, "result": result.result}
+    emit(data, lambda: console.print(f"[green]d^{order}/d{var}^{order} ({expression}) = {result.result}[/green]"))
+    log_calculation("calculus", "derivative", {"expression": expression, "var": var, "order": order}, result.result)
+
+
+@calculus_app.command("integral")
+def integral_cmd(
+    expression: str = typer.Argument(..., help='Expression, e.g. "x**2"'),
+    var: str = typer.Option("x", "--var", help="Variable to integrate with respect to"),
+    lower: Optional[float] = typer.Option(None, "--lower", help="Lower bound (definite integral)"),
+    upper: Optional[float] = typer.Option(None, "--upper", help="Upper bound (definite integral)"),
+) -> None:
+    """Compute an indefinite or definite integral."""
+    try:
+        result = calculus.integral(expression, var, lower, upper)
+    except ValidationError as e:
+        _fail(e)
+    data = {"expression": expression, "var": var, "lower": lower, "upper": upper, "result": result.result}
+    emit(data, lambda: console.print(f"[green]\u222b {expression} d{var} = {result.result}[/green]"))
+    log_calculation("calculus", "integral", {"expression": expression, "var": var, "lower": lower, "upper": upper}, result.result)
+
+
+@calculus_app.command("limit")
+def limit_cmd(
+    expression: str = typer.Argument(..., help='Expression, e.g. "sin(x)/x"'),
+    point: str = typer.Argument(..., help="Point the variable approaches (number, or 'oo'/'-oo' for infinity)"),
+    var: str = typer.Option("x", "--var", help="Variable"),
+    direction: str = typer.Option("both", "--direction", help="'both', 'left', or 'right'"),
+) -> None:
+    """Compute a limit."""
+    try:
+        result = calculus.limit(expression, var, point, direction)
+    except ValidationError as e:
+        _fail(e)
+    data = {"expression": expression, "var": var, "point": point, "direction": direction, "result": result.result}
+    emit(data, lambda: console.print(f"[green]lim ({var}->{point}) ({expression}) = {result.result}[/green]"))
+    log_calculation("calculus", "limit", {"expression": expression, "point": point, "direction": direction}, result.result)
+
+
+@calculus_app.command("taylor-series")
+def taylor_series_cmd(
+    expression: str = typer.Argument(..., help='Expression, e.g. "exp(x)"'),
+    var: str = typer.Option("x", "--var", help="Variable"),
+    point: float = typer.Option(0, "--point", help="Expansion point"),
+    order: int = typer.Option(5, "--order", help="Expansion order"),
+) -> None:
+    """Compute the Taylor series expansion of an expression about a point."""
+    try:
+        result = calculus.taylor_series(expression, var, point, order)
+    except ValidationError as e:
+        _fail(e)
+    data = {"expression": expression, "var": var, "point": point, "order": order, "result": result.result}
+    emit(data, lambda: console.print(f"[green]{expression} \u2248 {result.result}[/green]  [dim](about {var}={point}, order {order})[/dim]"))
+    log_calculation("calculus", "taylor-series", {"expression": expression, "point": point, "order": order}, result.result)
+
+
+# ---------------------------------------------------------------------------
+# geometry
+# ---------------------------------------------------------------------------
+
+
+def _render_shape(result) -> None:
+    console.print(f"[green]{result.shape.capitalize()}:[/green]")
+    for key, val in result.measurements.items():
+        console.print(f"  {key.replace('_', ' ')}: {val:g}")
+
+
+@geometry_app.command("circle")
+def geometry_circle_cmd(radius: float = typer.Argument(..., help="Radius")) -> None:
+    """Area and circumference of a circle."""
+    try:
+        result = geometry.circle(radius)
+    except ValidationError as e:
+        _fail(e)
+    emit({"shape": "circle", **result.measurements}, lambda: _render_shape(result))
+    log_calculation("geometry", "circle", {"radius": radius}, f"area={result.measurements['area']:g}")
+
+
+@geometry_app.command("rectangle")
+def geometry_rectangle_cmd(length: float = typer.Argument(...), width: float = typer.Argument(...)) -> None:
+    """Area and perimeter of a rectangle."""
+    try:
+        result = geometry.rectangle(length, width)
+    except ValidationError as e:
+        _fail(e)
+    emit({"shape": "rectangle", **result.measurements}, lambda: _render_shape(result))
+    log_calculation("geometry", "rectangle", {"length": length, "width": width}, f"area={result.measurements['area']:g}")
+
+
+@geometry_app.command("triangle-bh")
+def geometry_triangle_bh_cmd(base: float = typer.Argument(...), height: float = typer.Argument(...)) -> None:
+    """Area of a triangle from base and height."""
+    try:
+        result = geometry.triangle_base_height(base, height)
+    except ValidationError as e:
+        _fail(e)
+    emit({"shape": "triangle", **result.measurements}, lambda: _render_shape(result))
+    log_calculation("geometry", "triangle-bh", {"base": base, "height": height}, f"area={result.measurements['area']:g}")
+
+
+@geometry_app.command("triangle-sides")
+def geometry_triangle_sides_cmd(
+    a: float = typer.Argument(...), b: float = typer.Argument(...), c: float = typer.Argument(...)
+) -> None:
+    """Area (Heron's formula) and perimeter of a triangle given all three sides."""
+    try:
+        result = geometry.triangle_sides(a, b, c)
+    except ValidationError as e:
+        _fail(e)
+    emit({"shape": "triangle", **result.measurements}, lambda: _render_shape(result))
+    log_calculation("geometry", "triangle-sides", {"a": a, "b": b, "c": c}, f"area={result.measurements['area']:g}")
+
+
+@geometry_app.command("pythagorean-hypotenuse")
+def geometry_pyth_hyp_cmd(leg_a: float = typer.Argument(...), leg_b: float = typer.Argument(...)) -> None:
+    """Hypotenuse given two legs."""
+    try:
+        result = geometry.pythagorean_hypotenuse(leg_a, leg_b)
+    except ValidationError as e:
+        _fail(e)
+    emit({"hypotenuse": result}, lambda: console.print(f"[green]Hypotenuse:[/green] {result:g}"))
+    log_calculation("geometry", "pythagorean-hypotenuse", {"leg_a": leg_a, "leg_b": leg_b}, f"{result:g}")
+
+
+@geometry_app.command("pythagorean-leg")
+def geometry_pyth_leg_cmd(hypotenuse: float = typer.Argument(...), other_leg: float = typer.Argument(...)) -> None:
+    """Missing leg given the hypotenuse and the other leg."""
+    try:
+        result = geometry.pythagorean_leg(hypotenuse, other_leg)
+    except ValidationError as e:
+        _fail(e)
+    emit({"leg": result}, lambda: console.print(f"[green]Leg:[/green] {result:g}"))
+    log_calculation("geometry", "pythagorean-leg", {"hypotenuse": hypotenuse, "other_leg": other_leg}, f"{result:g}")
+
+
+@geometry_app.command("distance")
+def geometry_distance_cmd(
+    x1: float = typer.Option(..., "--x1"), y1: float = typer.Option(..., "--y1"),
+    x2: float = typer.Option(..., "--x2"), y2: float = typer.Option(..., "--y2"),
+    z1: Optional[float] = typer.Option(None, "--z1", help="Provide z1 and z2 for 3D distance"),
+    z2: Optional[float] = typer.Option(None, "--z2"),
+) -> None:
+    """Distance between two points (2D, or 3D if z1/z2 are given)."""
+    if (z1 is None) != (z2 is None):
+        _fail(ValidationError("Provide both z1 and z2 for 3D, or neither for 2D."))
+    if z1 is not None:
+        result = geometry.distance_3d(x1, y1, z1, x2, y2, z2)
+    else:
+        result = geometry.distance_2d(x1, y1, x2, y2)
+    emit({"distance": result}, lambda: console.print(f"[green]Distance:[/green] {result:g}"))
+    log_calculation("geometry", "distance", {"x1": x1, "y1": y1, "x2": x2, "y2": y2}, f"{result:g}")
+
+
+@geometry_app.command("sphere")
+def geometry_sphere_cmd(radius: float = typer.Argument(...)) -> None:
+    """Volume and surface area of a sphere."""
+    try:
+        result = geometry.sphere(radius)
+    except ValidationError as e:
+        _fail(e)
+    emit({"shape": "sphere", **result.measurements}, lambda: _render_shape(result))
+    log_calculation("geometry", "sphere", {"radius": radius}, f"volume={result.measurements['volume']:g}")
+
+
+@geometry_app.command("cylinder")
+def geometry_cylinder_cmd(radius: float = typer.Argument(...), height: float = typer.Argument(...)) -> None:
+    """Volume and surface area of a cylinder."""
+    try:
+        result = geometry.cylinder(radius, height)
+    except ValidationError as e:
+        _fail(e)
+    emit({"shape": "cylinder", **result.measurements}, lambda: _render_shape(result))
+    log_calculation("geometry", "cylinder", {"radius": radius, "height": height}, f"volume={result.measurements['volume']:g}")
+
+
+@geometry_app.command("cone")
+def geometry_cone_cmd(radius: float = typer.Argument(...), height: float = typer.Argument(...)) -> None:
+    """Volume and surface area of a cone."""
+    try:
+        result = geometry.cone(radius, height)
+    except ValidationError as e:
+        _fail(e)
+    emit({"shape": "cone", **result.measurements}, lambda: _render_shape(result))
+    log_calculation("geometry", "cone", {"radius": radius, "height": height}, f"volume={result.measurements['volume']:g}")
+
+
+@geometry_app.command("box")
+def geometry_box_cmd(
+    length: float = typer.Argument(...), width: float = typer.Argument(...), height: float = typer.Argument(...)
+) -> None:
+    """Volume and surface area of a rectangular box."""
+    try:
+        result = geometry.box(length, width, height)
+    except ValidationError as e:
+        _fail(e)
+    emit({"shape": "box", **result.measurements}, lambda: _render_shape(result))
+    log_calculation("geometry", "box", {"length": length, "width": width, "height": height}, f"volume={result.measurements['volume']:g}")
+
+
+# ---------------------------------------------------------------------------
+# linalg
+# ---------------------------------------------------------------------------
+
+
+def _parse_vector_arg(s: str) -> list[float]:
+    try:
+        return [float(x) for x in s.split(",")]
+    except ValueError:
+        raise ValidationError(f"Could not parse vector '{s}' -- expected comma-separated numbers, e.g. 1,2,3")
+
+
+def _parse_matrix_arg(s: str) -> list[list[float]]:
+    rows = s.split(";")
+    try:
+        return [[float(x) for x in row.split(",")] for row in rows]
+    except ValueError:
+        raise ValidationError(f"Could not parse matrix '{s}' -- expected semicolon-separated rows, e.g. 1,2;3,4")
+
+
+@linalg_app.command("vector-dot")
+def vector_dot_cmd(v1: str = typer.Argument(..., help="e.g. 1,2,3"), v2: str = typer.Argument(...)) -> None:
+    """Dot product of two vectors."""
+    try:
+        result = linear_algebra.vector_dot(_parse_vector_arg(v1), _parse_vector_arg(v2))
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]Dot product:[/green] {result:g}"))
+    log_calculation("linalg", "vector-dot", {"v1": v1, "v2": v2}, f"{result:g}")
+
+
+@linalg_app.command("vector-cross")
+def vector_cross_cmd(v1: str = typer.Argument(..., help="e.g. 1,0,0"), v2: str = typer.Argument(...)) -> None:
+    """Cross product of two 3D vectors."""
+    try:
+        result = linear_algebra.vector_cross(_parse_vector_arg(v1), _parse_vector_arg(v2))
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]Cross product:[/green] ({', '.join(f'{x:g}' for x in result)})"))
+    log_calculation("linalg", "vector-cross", {"v1": v1, "v2": v2}, str(result))
+
+
+@linalg_app.command("vector-magnitude")
+def vector_magnitude_cmd(v: str = typer.Argument(..., help="e.g. 3,4")) -> None:
+    """Magnitude (length) of a vector."""
+    try:
+        result = linear_algebra.vector_magnitude(_parse_vector_arg(v))
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]Magnitude:[/green] {result:g}"))
+    log_calculation("linalg", "vector-magnitude", {"v": v}, f"{result:g}")
+
+
+@linalg_app.command("vector-normalize")
+def vector_normalize_cmd(v: str = typer.Argument(..., help="e.g. 3,4")) -> None:
+    """Unit vector in the same direction."""
+    try:
+        result = linear_algebra.vector_normalize(_parse_vector_arg(v))
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]Unit vector:[/green] ({', '.join(f'{x:g}' for x in result)})"))
+    log_calculation("linalg", "vector-normalize", {"v": v}, str(result))
+
+
+@linalg_app.command("vector-angle")
+def vector_angle_cmd(v1: str = typer.Argument(...), v2: str = typer.Argument(...)) -> None:
+    """Angle between two vectors, in degrees."""
+    try:
+        result_rad = linear_algebra.vector_angle_between(_parse_vector_arg(v1), _parse_vector_arg(v2))
+    except ValidationError as e:
+        _fail(e)
+    result_deg = result_rad * 180 / 3.141592653589793
+    emit({"radians": result_rad, "degrees": result_deg}, lambda: console.print(f"[green]Angle:[/green] {result_deg:g}\u00b0 ({result_rad:g} rad)"))
+    log_calculation("linalg", "vector-angle", {"v1": v1, "v2": v2}, f"{result_deg:g} deg")
+
+
+def _render_matrix(rows: list[list[float]]) -> None:
+    table = Table(show_header=False)
+    for _ in rows[0]:
+        table.add_column(justify="right")
+    for row in rows:
+        table.add_row(*[f"{x:g}" for x in row])
+    console.print(table)
+
+
+@linalg_app.command("matrix-add")
+def matrix_add_cmd(m1: str = typer.Argument(..., help="e.g. 1,2;3,4"), m2: str = typer.Argument(...)) -> None:
+    """Add two matrices."""
+    try:
+        result = linear_algebra.matrix_add(_parse_matrix_arg(m1), _parse_matrix_arg(m2))
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result.rows}, lambda: _render_matrix(result.rows))
+    log_calculation("linalg", "matrix-add", {"m1": m1, "m2": m2}, str(result.rows))
+
+
+@linalg_app.command("matrix-multiply")
+def matrix_multiply_cmd(m1: str = typer.Argument(...), m2: str = typer.Argument(...)) -> None:
+    """Multiply two matrices."""
+    try:
+        result = linear_algebra.matrix_multiply(_parse_matrix_arg(m1), _parse_matrix_arg(m2))
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result.rows}, lambda: _render_matrix(result.rows))
+    log_calculation("linalg", "matrix-multiply", {"m1": m1, "m2": m2}, str(result.rows))
+
+
+@linalg_app.command("matrix-transpose")
+def matrix_transpose_cmd(m: str = typer.Argument(...)) -> None:
+    """Transpose a matrix."""
+    try:
+        result = linear_algebra.matrix_transpose(_parse_matrix_arg(m))
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result.rows}, lambda: _render_matrix(result.rows))
+    log_calculation("linalg", "matrix-transpose", {"m": m}, str(result.rows))
+
+
+@linalg_app.command("matrix-det")
+def matrix_det_cmd(m: str = typer.Argument(...)) -> None:
+    """Determinant of a square matrix."""
+    try:
+        result = linear_algebra.matrix_determinant(_parse_matrix_arg(m))
+    except ValidationError as e:
+        _fail(e)
+    emit({"determinant": result}, lambda: console.print(f"[green]Determinant:[/green] {result:g}"))
+    log_calculation("linalg", "matrix-det", {"m": m}, f"{result:g}")
+
+
+@linalg_app.command("matrix-inverse")
+def matrix_inverse_cmd(m: str = typer.Argument(...)) -> None:
+    """Inverse of a square matrix."""
+    try:
+        result = linear_algebra.matrix_inverse(_parse_matrix_arg(m))
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result.rows}, lambda: _render_matrix(result.rows))
+    log_calculation("linalg", "matrix-inverse", {"m": m}, str(result.rows))
+
+
+# ---------------------------------------------------------------------------
+# sequences
+# ---------------------------------------------------------------------------
+
+
+@sequences_app.command("arithmetic-term")
+def arithmetic_term_cmd(
+    a1: float = typer.Option(..., "--a1"), d: float = typer.Option(..., "--d"), n: int = typer.Option(..., "--n")
+) -> None:
+    """nth term of an arithmetic sequence."""
+    try:
+        result = sequences.arithmetic_nth_term(a1, d, n)
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]a_{n} =[/green] {result:g}"))
+    log_calculation("sequences", "arithmetic-term", {"a1": a1, "d": d, "n": n}, f"{result:g}")
+
+
+@sequences_app.command("arithmetic-sum")
+def arithmetic_sum_cmd(
+    a1: float = typer.Option(..., "--a1"), d: float = typer.Option(..., "--d"), n: int = typer.Option(..., "--n")
+) -> None:
+    """Sum of the first n terms of an arithmetic sequence."""
+    try:
+        result = sequences.arithmetic_sum(a1, d, n)
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]S_{n} =[/green] {result:g}"))
+    log_calculation("sequences", "arithmetic-sum", {"a1": a1, "d": d, "n": n}, f"{result:g}")
+
+
+@sequences_app.command("geometric-term")
+def geometric_term_cmd(
+    a1: float = typer.Option(..., "--a1"), r: float = typer.Option(..., "--r"), n: int = typer.Option(..., "--n")
+) -> None:
+    """nth term of a geometric sequence."""
+    try:
+        result = sequences.geometric_nth_term(a1, r, n)
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]a_{n} =[/green] {result:g}"))
+    log_calculation("sequences", "geometric-term", {"a1": a1, "r": r, "n": n}, f"{result:g}")
+
+
+@sequences_app.command("geometric-sum")
+def geometric_sum_cmd(
+    a1: float = typer.Option(..., "--a1"), r: float = typer.Option(..., "--r"), n: int = typer.Option(..., "--n")
+) -> None:
+    """Sum of the first n terms of a geometric sequence."""
+    try:
+        result = sequences.geometric_sum(a1, r, n)
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]S_{n} =[/green] {result:g}"))
+    log_calculation("sequences", "geometric-sum", {"a1": a1, "r": r, "n": n}, f"{result:g}")
+
+
+@sequences_app.command("geometric-sum-infinite")
+def geometric_sum_infinite_cmd(a1: float = typer.Option(..., "--a1"), r: float = typer.Option(..., "--r")) -> None:
+    """Sum of an infinite geometric series (requires |r| < 1)."""
+    try:
+        result = sequences.geometric_sum_infinite(a1, r)
+    except ValidationError as e:
+        _fail(e)
+    emit({"sum": result.sum}, lambda: console.print(f"[green]S_\u221e =[/green] {result.sum:g}"))
+    log_calculation("sequences", "geometric-sum-infinite", {"a1": a1, "r": r}, f"{result.sum:g}")
+
+
+# ---------------------------------------------------------------------------
+# probability
+# ---------------------------------------------------------------------------
+
+
+@probability_app.command("binomial-pmf")
+def binomial_pmf_cmd(n: int = typer.Option(..., "--n"), k: int = typer.Option(..., "--k"), p: float = typer.Option(..., "--p")) -> None:
+    """P(X = k) for X ~ Binomial(n, p)."""
+    try:
+        result = probability.binomial_pmf(n, k, p)
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]P(X = {k}):[/green] {result:g}"))
+    log_calculation("probability", "binomial-pmf", {"n": n, "k": k, "p": p}, f"{result:g}")
+
+
+@probability_app.command("binomial-cdf")
+def binomial_cdf_cmd(n: int = typer.Option(..., "--n"), k: int = typer.Option(..., "--k"), p: float = typer.Option(..., "--p")) -> None:
+    """P(X <= k) for X ~ Binomial(n, p)."""
+    try:
+        result = probability.binomial_cdf(n, k, p)
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]P(X \u2264 {k}):[/green] {result:g}"))
+    log_calculation("probability", "binomial-cdf", {"n": n, "k": k, "p": p}, f"{result:g}")
+
+
+@probability_app.command("binomial-stats")
+def binomial_stats_cmd(n: int = typer.Option(..., "--n"), p: float = typer.Option(..., "--p")) -> None:
+    """Mean, variance, and stdev of X ~ Binomial(n, p)."""
+    try:
+        result = probability.binomial_stats(n, p)
+    except ValidationError as e:
+        _fail(e)
+    data = {"mean": result.mean, "variance": result.variance, "stdev": result.stdev}
+    emit(data, lambda: console.print(f"[green]Mean:[/green] {result.mean:g}  [green]Variance:[/green] {result.variance:g}  [green]Stdev:[/green] {result.stdev:g}"))
+    log_calculation("probability", "binomial-stats", {"n": n, "p": p}, f"mean={result.mean:g}")
+
+
+@probability_app.command("normal-pdf")
+def normal_pdf_cmd(x: float = typer.Argument(...), mean: float = typer.Option(0, "--mean"), stdev: float = typer.Option(1, "--stdev")) -> None:
+    """Normal distribution PDF at x."""
+    try:
+        result = probability.normal_pdf(x, mean, stdev)
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]f({x}):[/green] {result:g}"))
+    log_calculation("probability", "normal-pdf", {"x": x, "mean": mean, "stdev": stdev}, f"{result:g}")
+
+
+@probability_app.command("normal-cdf")
+def normal_cdf_cmd(x: float = typer.Argument(...), mean: float = typer.Option(0, "--mean"), stdev: float = typer.Option(1, "--stdev")) -> None:
+    """P(X <= x) for X ~ Normal(mean, stdev)."""
+    try:
+        result = probability.normal_cdf(x, mean, stdev)
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]P(X \u2264 {x}):[/green] {result:g}"))
+    log_calculation("probability", "normal-cdf", {"x": x, "mean": mean, "stdev": stdev}, f"{result:g}")
+
+
+@probability_app.command("normal-cdf-range")
+def normal_cdf_range_cmd(
+    low: float = typer.Argument(...), high: float = typer.Argument(...),
+    mean: float = typer.Option(0, "--mean"), stdev: float = typer.Option(1, "--stdev"),
+) -> None:
+    """P(low <= X <= high) for X ~ Normal(mean, stdev)."""
+    try:
+        result = probability.normal_cdf_range(low, high, mean, stdev)
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]P({low} \u2264 X \u2264 {high}):[/green] {result:g}"))
+    log_calculation("probability", "normal-cdf-range", {"low": low, "high": high, "mean": mean, "stdev": stdev}, f"{result:g}")
+
+
+@probability_app.command("inverse-normal-cdf")
+def inverse_normal_cdf_cmd(p: float = typer.Argument(...), mean: float = typer.Option(0, "--mean"), stdev: float = typer.Option(1, "--stdev")) -> None:
+    """The x such that P(X <= x) = p (TI-84's invNorm)."""
+    try:
+        result = probability.inverse_normal_cdf(p, mean, stdev)
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]x:[/green] {result:g}"))
+    log_calculation("probability", "inverse-normal-cdf", {"p": p, "mean": mean, "stdev": stdev}, f"{result:g}")
+
+
+@probability_app.command("z-score")
+def z_score_cmd(x: float = typer.Argument(...), mean: float = typer.Option(..., "--mean"), stdev: float = typer.Option(..., "--stdev")) -> None:
+    """Z-score of x given a mean and standard deviation."""
+    try:
+        result = probability.z_score(x, mean, stdev)
+    except ValidationError as e:
+        _fail(e)
+    emit({"result": result}, lambda: console.print(f"[green]z:[/green] {result:g}"))
+    log_calculation("probability", "z-score", {"x": x, "mean": mean, "stdev": stdev}, f"{result:g}")
+
+
+# ---------------------------------------------------------------------------
+# finance
+# ---------------------------------------------------------------------------
+
+
+@finance_app.command("tvm")
+def tvm_cmd(
+    n: Optional[float] = typer.Option(None, "--n", help="Number of payment periods"),
+    rate: Optional[float] = typer.Option(None, "--rate", help="Annual interest rate, percent"),
+    pv: Optional[float] = typer.Option(None, "--pv", help="Present value (negative if paid out)"),
+    pmt: Optional[float] = typer.Option(None, "--pmt", help="Payment per period (negative if paid out)"),
+    fv: Optional[float] = typer.Option(None, "--fv", help="Future value (negative if paid out)"),
+    payments_per_year: int = typer.Option(12, "--payments-per-year", help="Compounding/payment frequency"),
+    begin: bool = typer.Option(False, "--begin", help="Payments at beginning of period (annuity due)"),
+    steps: bool = typer.Option(False, "--steps", help="Show the derivation"),
+) -> None:
+    """TVM solver: given any 4 of {n, rate, pv, pmt, fv}, solve for the 5th."""
+    try:
+        result = finance.solve_tvm(n, rate, pv, pmt, fv, payments_per_year, begin)
+    except ValidationError as e:
+        _fail(e)
+
+    data = {"n": result.n, "rate_percent": result.rate_percent, "pv": result.pv, "pmt": result.pmt, "fv": result.fv, "solved_for": result.solved_for}
+    if steps:
+        data["steps"] = result.steps
+
+    def render():
+        console.print(f"[green]Solved for {result.solved_for}:[/green]")
+        console.print(f"  n = {result.n:g}")
+        console.print(f"  rate = {result.rate_percent:g}%")
+        console.print(f"  pv = {result.pv:g}")
+        console.print(f"  pmt = {result.pmt:g}")
+        console.print(f"  fv = {result.fv:g}")
+        if steps:
+            console.print("\n[bold]Steps:[/bold]")
+            for line in result.steps:
+                console.print(f"  {line}")
+
+    emit(data, render)
+    log_calculation("finance", "tvm", {"n": n, "rate": rate, "pv": pv, "pmt": pmt, "fv": fv}, f"solved {result.solved_for}")
+
+
+@finance_app.command("compound-interest")
+def compound_interest_cmd(
+    principal: float = typer.Option(..., "--principal"),
+    rate: float = typer.Option(..., "--rate", help="Annual rate, percent"),
+    compounds_per_year: int = typer.Option(12, "--compounds-per-year"),
+    years: float = typer.Option(..., "--years"),
+) -> None:
+    """Future value of a lump sum under compound interest (no recurring payments)."""
+    try:
+        result = finance.compound_interest(principal, rate, compounds_per_year, years)
+    except ValidationError as e:
+        _fail(e)
+    data = {"future_value": result.future_value, "interest_earned": result.interest_earned}
+    emit(data, lambda: console.print(f"[green]Future value:[/green] {result.future_value:g}  [green]Interest earned:[/green] {result.interest_earned:g}"))
+    log_calculation("finance", "compound-interest", {"principal": principal, "rate": rate, "years": years}, f"fv={result.future_value:g}")
 
 
 # ---------------------------------------------------------------------------
